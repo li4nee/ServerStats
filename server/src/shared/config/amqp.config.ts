@@ -53,11 +53,11 @@ class AMQPConnection {
       await this.channel!.bindQueue(queue, exchange, routingKey);
    }
 
-   private checkIfChannelExists(){
+   private checkIfChannelExists() {
       if (!this.channel) {
          logger.error("AMQP channel not found. Please establish a connection first.");
          throw new ResourceNotFoundError("AMQP channel not found. Please establish a connection first.");
-      }  
+      }
    }
 
    /**

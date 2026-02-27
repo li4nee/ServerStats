@@ -4,7 +4,7 @@
  * The error classes include InvalidInputError, PermissionNotGranted, ResourceNotFoundError, and InternalServerError, each with default messages and corresponding HTTP status codes.
  */
 
-export enum ErrorMessage {
+export enum ErrorCode {
    INVALID_INPUT = "INVALID_INPUT",
    PERMISSION_NOT_GRANTED = "PERMISSION_NOT_GRANTED",
    RESOURCE_NOT_FOUND = "RESOURCE_NOT_FOUND",
@@ -28,10 +28,10 @@ export enum ErrorHttpStatusCode {
  */
 export class CustomError extends Error {
    public statusCode: number;
-   public errorCode: ErrorMessage;
+   public errorCode: ErrorCode;
    public isOperational: boolean;
 
-   constructor(message: string, statusCode: number, errorCode: ErrorMessage) {
+   constructor(message: string, statusCode: number, errorCode: ErrorCode) {
       super(message);
 
       this.statusCode = statusCode;
@@ -49,7 +49,7 @@ export class CustomError extends Error {
  */
 export class InvalidInputError extends CustomError {
    constructor(message = "Invalid input") {
-      super(message, ErrorHttpStatusCode.INVALID_INPUT, ErrorMessage.INVALID_INPUT);
+      super(message, ErrorHttpStatusCode.INVALID_INPUT, ErrorCode.INVALID_INPUT);
    }
 }
 
@@ -59,7 +59,7 @@ export class InvalidInputError extends CustomError {
  */
 export class PermissionNotGranted extends CustomError {
    constructor(message = "Permission not granted") {
-      super(message, ErrorHttpStatusCode.PERMISSION_NOT_GRANTED, ErrorMessage.PERMISSION_NOT_GRANTED);
+      super(message, ErrorHttpStatusCode.PERMISSION_NOT_GRANTED, ErrorCode.PERMISSION_NOT_GRANTED);
    }
 }
 
@@ -69,7 +69,7 @@ export class PermissionNotGranted extends CustomError {
  */
 export class ResourceNotFoundError extends CustomError {
    constructor(message = "Resource not found") {
-      super(message, ErrorHttpStatusCode.RESOURCE_NOT_FOUND, ErrorMessage.RESOURCE_NOT_FOUND);
+      super(message, ErrorHttpStatusCode.RESOURCE_NOT_FOUND, ErrorCode.RESOURCE_NOT_FOUND);
    }
 }
 
@@ -79,7 +79,7 @@ export class ResourceNotFoundError extends CustomError {
  */
 export class RateLimitExceededError extends CustomError {
    constructor(message = "Rate limit exceeded") {
-      super(message, ErrorHttpStatusCode.RATE_LIMIT_EXCEEDED, ErrorMessage.RATE_LIMIT_EXCEEDED);
+      super(message, ErrorHttpStatusCode.RATE_LIMIT_EXCEEDED, ErrorCode.RATE_LIMIT_EXCEEDED);
    }
 }
 
@@ -89,6 +89,6 @@ export class RateLimitExceededError extends CustomError {
  */
 export class InternalServerError extends CustomError {
    constructor(message = "Internal server error") {
-      super(message, ErrorHttpStatusCode.INTERNAL_SERVER_ERROR, ErrorMessage.INTERNAL_SERVER_ERROR);
+      super(message, ErrorHttpStatusCode.INTERNAL_SERVER_ERROR, ErrorCode.INTERNAL_SERVER_ERROR);
    }
 }

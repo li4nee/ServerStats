@@ -59,9 +59,11 @@ app.get("/health", async (req: Request, res: Response) => {
  * Root endpoint
  */
 app.get("/", (req: Request, res: Response) => {
-    res.status(200).json(ResponseFormatter.success("Welcome to the Server Monitoring API", 200,{
-        version:globalConfig.version
-    }));
+   res.status(200).json(
+      ResponseFormatter.success("Welcome to the Server Monitoring API", 200, {
+         version: globalConfig.version,
+      }),
+   );
 });
 
 /**
@@ -69,24 +71,19 @@ app.get("/", (req: Request, res: Response) => {
  */
 app.use((req: Request, res: Response) => {
    throw new ResourceNotFoundError(`Cannot find endpoint: ${req.method} ${req.path}`);
-})
+});
 
 /**
- * Initialize all the connections 
+ * Initialize all the connections
  */
-async function initializeConnections()
-{
+async function initializeConnections() {
    try {
       logger.info("Initializing connections to MongoDB, PostgreSQL, and RabbitMQ...");
-      await Promise.all([
-         mongoConnection.connect(),
-         postgresConnection.testConnection(),
-         amqpConnection.connect(),
-      ]);
+      await Promise.all([mongoConnection.connect(), postgresConnection.testConnection(), amqpConnection.connect()]);
       logger.info("All connections initialized successfully");
    } catch (error) {
       logger.error("Error initializing connections", { error });
-      throw error
+      throw error;
    }
 }
 
@@ -94,16 +91,51 @@ async function initializeConnections()
  * Start the server after initializing connections
  */
 
-async function startFunction()
-{
+async function startServer() {
    try {
       await initializeConnections();
-      app.listen(globalConfig.port, () => {
+      
+      let server = app.listen(globalConfig.port, () => {
          logger.info(`Server is running on port ${globalConfig.port}`);
          logger.info(`Node environment: ${globalConfig.node_env}`);
+      });
+
+      const graceFullShutdown = () => {
+         logger.info("Received shutdown signal, closing server and connections...");
+         server.close(async () => {
+            logger.info("HTTP server closed");
+            try {
+               await mongoConnection.disconnect();
+               await postgresConnection.disconnect();
+               await amqpConnection.close();
+               logger.info("Server and all connections closed gracefully");
+               process.exit(0);
+            } catch (error) {
+               logger.error("Error during server shutdown", { error });
+               setTimeout(() => {
+                  process.exit(1);
+               });
+            }
+         });
+      };
+
+      process.on("SIGINT", () => graceFullShutdown());
+      process.on("SIGTERM", () => graceFullShutdown());
+
+      process.on("uncaughtException", (err) => {
+         logger.error("Uncaught Exception", { error: err });
+         graceFullShutdown();
+      });
+
+      process.on("unhandledRejection", (reason, promise) => {
+         logger.error("Unhandled Rejection at:", { promise, reason });
+         graceFullShutdown();
       });
    } catch (error) {
       logger.error("Failed to start the server", { error });
       process.exit(1);
    }
 }
+
+
+startServer();

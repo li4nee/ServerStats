@@ -116,7 +116,7 @@ class AMQPConnection {
 
       try {
          this.isConnecting = true;
-         logger.info("Establishing new AMQP connection on ", globalConfig.amqp.url);
+         logger.info("Establishing new AMQP connection");
          this.connection = await amqp.connect(this.url);
          this.channel = await this.connection.createChannel();
          logger.info("AMQP connection and channel established successfully.");

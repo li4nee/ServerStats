@@ -89,6 +89,19 @@ class PostgresConnection {
          logger.warn("No PostgreSQL pool to disconnect.");
       }
    }
+
+   async checkConnectionStatus(): Promise<string> {
+      if (!this.pool) {
+         return "DISCONNECTED";
+      }
+
+      try {
+         await this.pool.query("SELECT 1"); // lightweight test
+         return "CONNECTED";
+      } catch (err) {
+         return "DISCONNECTED";
+      }
+   }
 }
 
 export default new PostgresConnection();

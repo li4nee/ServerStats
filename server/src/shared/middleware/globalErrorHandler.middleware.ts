@@ -1,21 +1,96 @@
 import { Request, Response, NextFunction } from "express";
-import { CustomError } from "../typings/error.typings";
+import { CustomError, ErrorCode } from "../typings/error.typings";
 import { ResponseFormatter } from "../utils/responseFormatter.utils";
 import logger from "../config/logger.config";
+import { globalConfig } from "../config/global.config";
 
 /**
- * GlobalErrorHandler is a middleware for handling errors across the application.
- * Keep this in the end of the middleware stack to catch any unhandled errors.
+ * GlobalErrorHandler is an Express middleware for handling errors across the application.
+ * It also logs errors.
  */
 export class GlobalErrorHandler {
-   static handleError(err: Error, req: Request, res: Response, next: NextFunction) {
+   static handleError(err: any, req: Request, res: Response, _next: NextFunction) {
+      const isProduction = globalConfig.node_env === "production";
+      const logContext = {
+         message: err.message,
+         stack: err.stack,
+         path: req.path,
+         method: req.method,
+      };
+
       if (err instanceof CustomError) {
-         if (err.isOperational) logger.error(`Operational error: ${err.message}`, { stack: err.stack, errorCode: err.errorCode });
-         return res.status(err.statusCode).json(ResponseFormatter.error(err.message, err.statusCode, err, err.errorCode));
+         logger.error("Operational error", {
+            ...logContext,
+            errorCode: err.errorCode,
+         });
+
+         return res
+            .status(err.statusCode)
+            .json(ResponseFormatter.error(err.message, err.statusCode, isProduction ? null : err, err.errorCode));
       }
 
-      // unknown or programming errors
-      logger.error(`Unexpected error: ${err.message}`, { stack: err.stack });
-      return res.status(500).json(ResponseFormatter.error("Internal Server Error", 500, err));
+      // Mainly postgres errors
+      if (err.code === "23505") {
+         logger.warn("Database unique constraint violation", logContext);
+
+         return res
+            .status(409)
+            .json(ResponseFormatter.error("Duplicate resource", 409, isProduction ? null : err, ErrorCode.INVALID_INPUT));
+      }
+
+      if (err.code === "23503") {
+         logger.warn("Database foreign key violation", logContext);
+
+         return res
+            .status(400)
+            .json(ResponseFormatter.error("Invalid reference", 400, isProduction ? null : err, ErrorCode.INVALID_INPUT));
+      }
+
+      // Mongoose Validation Errors
+      if (err.name === "ValidationError") {
+         logger.warn("Validation error", logContext);
+
+         return res
+            .status(400)
+            .json(ResponseFormatter.error("Validation Error", 400, isProduction ? null : err, ErrorCode.VALIDATION_ERROR));
+      }
+
+      // JWT Errors
+      if (err.name === "TokenExpiredError") {
+         logger.warn("Token expired", logContext);
+
+         return res
+            .status(401)
+            .json(
+               ResponseFormatter.error(
+                  "Authentication Error: Token Expired",
+                  401,
+                  isProduction ? null : err,
+                  ErrorCode.PERMISSION_NOT_GRANTED,
+               ),
+            );
+      }
+
+      if (err.name === "JsonWebTokenError") {
+         logger.warn("Invalid JWT token", logContext);
+
+         return res
+            .status(401)
+            .json(
+               ResponseFormatter.error(
+                  "Authentication Error: Invalid Token",
+                  401,
+                  isProduction ? null : err,
+                  ErrorCode.PERMISSION_NOT_GRANTED,
+               ),
+            );
+      }
+
+      // unexpected errors
+      logger.error("Unexpected error", logContext);
+
+      return res
+         .status(500)
+         .json(ResponseFormatter.error("Internal Server Error", 500, isProduction ? null : err, ErrorCode.INTERNAL_SERVER_ERROR));
    }
 }

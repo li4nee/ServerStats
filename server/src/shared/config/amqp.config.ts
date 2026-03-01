@@ -174,3 +174,5 @@ class AMQPConnection {
       }
    }
 }
+
+export default new AMQPConnection();

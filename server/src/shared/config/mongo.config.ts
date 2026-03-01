@@ -69,6 +69,24 @@ class MongoConnection {
    getConnection(): mongoose.Connection | null {
       return this.connection;
    }
+
+   getConnectionStatus(): string {
+      if (this.connection) {
+         switch (this.connection.readyState) {
+            case 0:
+               return "disconnected";
+            case 1:
+               return "connected";
+            case 2:
+               return "connecting";
+            case 3:
+               return "disconnecting";
+            default:
+               return "unknown";
+         }
+      }
+      return "not connected";
+   }
 }
 
 export default new MongoConnection();

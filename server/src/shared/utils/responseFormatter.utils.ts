@@ -52,7 +52,7 @@ export class ResponseFormatter {
     * @param data
     * @returns {ApiResponse} Success Response in standard form.
     */
-   static success(message: string, statusCode: number = 200, data?: any) : ApiResponse {
+   static success(message: string, statusCode: number = 200, data?: any): ApiResponse {
       return this.formatResponse(true, statusCode, message, data);
    }
 
@@ -76,7 +76,7 @@ export class ResponseFormatter {
     * @param data
     * @returns {PaginatedResponse} Pagibated Response in standard form with pagination details.
     */
-   static paginated(total: number, page: number, limit: number, message: string = "Success", data: any[]) : PaginatedResponse{
+   static paginated(total: number, page: number, limit: number, message: string = "Success", data: any[]): PaginatedResponse {
       return {
          success: true,
          statusCode: 200,

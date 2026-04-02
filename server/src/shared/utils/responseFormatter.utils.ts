@@ -10,6 +10,7 @@ export interface ApiResponse {
    data?: any;
    errorCode?: ErrorCode | null;
    timestamp: string;
+   error?: any;
 }
 
 /**
@@ -41,6 +42,7 @@ export class ResponseFormatter {
          message,
          data: data || null,
          errorCode: errorCode || null,
+         error: error || null,
          timestamp: new Date().toISOString(),
       };
    }

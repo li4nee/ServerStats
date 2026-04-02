@@ -22,7 +22,7 @@ export class JwtUtils {
       return jwt.sign(maskedPayload, secret, options);
    }
 
-   static verifyToken(token: string, secret: string): object | string {
+   private static verifyToken(token: string, secret: string): object | string {
       try {
          return jwt.verify(token, secret);
       } catch (error) {
@@ -30,10 +30,10 @@ export class JwtUtils {
       }
    }
 
-   static decodeToken(token: string): JwtPayload | null {
+   static decodeToken(token: string,secret:string): JwtPayload | null {
       let maskedPayload: MaskedJwtPayload | null = null;
       try {
-         maskedPayload = jwt.decode(token) as MaskedJwtPayload;
+         maskedPayload = this.verifyToken(token,secret) as MaskedJwtPayload;
       } catch (error) {
          return null;
       }
@@ -63,3 +63,4 @@ export class JwtUtils {
       return perms as Permissions;
    }
 }
+

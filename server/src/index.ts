@@ -10,24 +10,27 @@ import amqpConnection from "./shared/config/amqp.config";
 import { ResponseFormatter } from "./shared/utils/responseFormatter.utils";
 import { ResourceNotFoundError } from "./shared/typings/error.typings";
 import { GlobalErrorHandler } from "./shared/middleware/globalErrorHandler.middleware";
-
+import CookieParser from "cookie-parser";
+import AuthRouter from "./modules/auth/routes/auth.routes";
+import { CentralizedRequestLogger } from "./shared/middleware/requestLogger.middleware";
 const app = express();
 
 /**
  * Initialize middlewares
  */
 app.use(helmet());
-app.use(cors());
+app.use(
+   cors({
+      origin: true,
+      credentials: true,
+   }),
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
+app.use(CookieParser());
 // Request logging
 app.use((req: Request, res: Response, next: NextFunction) => {
-   logger.info(`${req.method} ${req.path}`, {
-      ip: req.ip,
-      userAgent: req.headers["user-agent"],
-   });
-   next();
+   return CentralizedRequestLogger(req, res, next);
 });
 
 /**
@@ -63,6 +66,11 @@ app.get("/", (req: Request, res: Response) => {
       }),
    );
 });
+
+/**
+ * Route handlers
+ */
+app.use("/api/v1/auth", AuthRouter);
 
 /**
  * 404 handler

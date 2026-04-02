@@ -16,6 +16,6 @@ export abstract class UserBaseRepo<T> {
    abstract findById(id: string): Promise<T | null>;
    abstract update(id: string, data: Partial<T>): Promise<T | null>;
    abstract delete(id: string): Promise<void>;
-   abstract findIfAnyExists(): Promise<boolean>;
+   abstract findIfAnyExists(isSuperAdmin?: boolean, email?: string): Promise<boolean>;
    abstract findIfAnyExistsAndReturnsCount(filter: Partial<T>): Promise<number>;
 }

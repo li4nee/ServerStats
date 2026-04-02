@@ -1,6 +1,6 @@
 import winston from "winston";
 import { globalConfig } from "./global.config";
-
+import expressWinston from "express-winston";
 /**
  * Custom log format for pretty console output in development.
  */
@@ -55,5 +55,6 @@ export const requestLogger = winston.createLogger({
     new winston.transports.File({ filename: "logs/requests.log" }),
   ],
 });
+
 
 export default logger;

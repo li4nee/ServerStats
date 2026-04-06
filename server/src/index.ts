@@ -11,7 +11,7 @@ import { ResponseFormatter } from "./shared/utils/responseFormatter.utils";
 import { ResourceNotFoundError } from "./shared/typings/error.typings";
 import { GlobalErrorHandler } from "./shared/middleware/globalErrorHandler.middleware";
 import CookieParser from "cookie-parser";
-import AuthRouter from "./modules/auth/routes/auth.routes";
+import AuthRouter from "./modules/auth/routes/auth.route";
 import { CentralizedRequestLogger } from "./shared/middleware/requestLogger.middleware";
 const app = express();
 

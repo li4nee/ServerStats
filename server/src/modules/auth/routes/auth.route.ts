@@ -1,5 +1,5 @@
 import { NextFunction, Router } from "express";
-import AuthDependenciesContainer from "../dependencies/auth.dependecies";
+import AuthDependenciesContainer from "../dependencies/auth.dependecy";
 import { validateBody } from "../../../shared/middleware/zodValidators.middleware";
 import { RegistrationDTO, SuperAdminOnboardingDto } from "../dtos/onboarding.dto";
 import { Response } from "express";

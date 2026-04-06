@@ -2,11 +2,12 @@ import { globalConfig } from "../../../shared/config/global.config";
 import { User, UserDocument } from "../../../shared/models/user.model";
 import { PermissionNotGranted, ResourceNotInitializedError } from "../../../shared/typings/error.typings";
 import { JwtUtils } from "../../../shared/utils/jwt.utils";
-import { UserBaseRepo } from "../repos/base.repo";
+import { UserBaseRepo } from "../repos/userBase.repo";
 import logger from "../../../shared/config/logger.config";
 import { RegistrationDTOType } from "../dtos/onboarding.dto";
 import { PasswordUtils } from "../../../shared/utils/password.utils";
 import { USER_ROLE } from "../../../shared/typings/base.typings";
+import { UserResponseDto } from "../dtos/userResponse.dto";
 
 type UniqueCheck = "email" | "username" | "both";
 
@@ -40,9 +41,9 @@ export class AuthService {
       return this.jwtUtils.generateToken(payload, globalConfig.jwt.secret, globalConfig.jwt.expiresIn);
    }
 
-   private formatUserResponseWithoutPassword(user: UserDocument): Omit<User, "password"> {
+   private formatUserResponseWithoutPassword(user: UserDocument): Omit<User, "password" | "trash" | "isActive"> {
       const userObj = user.toObject ? user.toObject() : { ...user };
-      const { password, ...rest } = userObj;
+      const { password, trash, isActive, ...rest } = userObj;
       return rest;
    }
 
@@ -84,7 +85,7 @@ export class AuthService {
       return user;
    }
 
-   async onboardSuperAdmin(superAdminData: Partial<User>): Promise<{ user: Omit<User, "password">; token: string }> {
+   async onboardSuperAdmin(superAdminData: Partial<User>): Promise<{ user: UserResponseDto; token: string }> {
       try {
          const user = await this.createUser(superAdminData, {
             uniqueBy: "email",
@@ -94,7 +95,7 @@ export class AuthService {
          const token = this.generateToken(user);
 
          return {
-            user: this.formatUserResponseWithoutPassword(user),
+            user: new UserResponseDto(user),
             token,
          };
       } catch (error) {
@@ -103,7 +104,7 @@ export class AuthService {
       }
    }
 
-   async register(userData: RegistrationDTOType): Promise<Omit<User, "password">> {
+   async register(userData: RegistrationDTOType): Promise<UserResponseDto> {
       try {
          const payload: Partial<User> = {
             email: userData.email,
@@ -116,14 +117,14 @@ export class AuthService {
             uniqueBy: "both",
          });
 
-         return this.formatUserResponseWithoutPassword(user);
+         return new UserResponseDto(user);
       } catch (error) {
          logger.error("User registration failed", { error });
          throw error;
       }
    }
 
-   async login(loginData: { email: string; password: string }): Promise<{ user: Omit<User, "password">; token: string }> {
+   async login(loginData: { email: string; password: string }): Promise<{ user: UserResponseDto; token: string }> {
       try {
          const user = await this.userRepo.findByEmail(loginData.email);
 
@@ -149,7 +150,7 @@ export class AuthService {
          logger.info(`User logged in: ${user.email}`);
 
          return {
-            user: this.formatUserResponseWithoutPassword(user as UserDocument),
+            user: new UserResponseDto(user as UserDocument),
             token,
          };
       } catch (error) {
@@ -158,7 +159,7 @@ export class AuthService {
       }
    }
 
-   async getProfile(userId: string): Promise<Omit<User, "password">> {
+   async getProfile(userId: string): Promise<Omit<User, "password" | "trash" | "isActive">> {
       const user = (await this.userRepo.findById(userId)) as UserDocument;
       if (!user) {
          logger.warn(`User not found for profile: ${userId}`);

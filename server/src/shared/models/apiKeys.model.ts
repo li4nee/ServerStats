@@ -46,13 +46,6 @@ const ApiKeySchema = new mongoose.Schema(
             type: Boolean,
             default: true,
          },
-
-         allowedServices: [
-            {
-               type: String,
-               trim: true,
-            },
-         ],
       },
       security: {
          allowedIPsIPV4: [
@@ -144,6 +137,7 @@ ApiKeySchema.index({ keyValue: 1, isActive: 1 });
 ApiKeySchema.index({ environment: 1, clientId: 1 });
 
 export type ApiKey = InferSchemaType<typeof ApiKeySchema>;
+export type ApiKeyWithId = ApiKey & { _id: mongoose.Types.ObjectId };
 export type ApiKeyDocument = HydratedDocument<ApiKey>;
 
 export const ApiKeyModel = mongoose.model("ApiKey", ApiKeySchema);

@@ -1,12 +1,13 @@
 import { globalConfig } from "../../../shared/config/global.config";
-import { User, UserDocument } from "../../../shared/models/user.model";
+import { User, UserDocument, UserWithId } from "../../../shared/models/user.model";
 import { PermissionNotGranted, ResourceNotInitializedError } from "../../../shared/typings/error.typings";
 import { JwtUtils } from "../../../shared/utils/jwt.utils";
-import { UserBaseRepo } from "../repos/base.repo";
+import { UserBaseRepo } from "../repos/userBase.repo";
 import logger from "../../../shared/config/logger.config";
 import { RegistrationDTOType } from "../dtos/onboarding.dto";
 import { PasswordUtils } from "../../../shared/utils/password.utils";
 import { USER_ROLE } from "../../../shared/typings/base.typings";
+import { UserResponseDto } from "../dtos/userResponse.dto";
 
 type UniqueCheck = "email" | "username" | "both";
 
@@ -19,31 +20,54 @@ const DEFAULT_PERMISSIONS = {
    canExportData: false,
 };
 
+export interface IAuthService {
+   validateUser(token: string): Promise<User>;
+}
 export class AuthService {
-   protected userRepo: UserBaseRepo<User>;
+   protected userRepo: UserBaseRepo<UserWithId>;
    private jwtUtils = JwtUtils;
 
-   constructor(userRepo: UserBaseRepo<User>) {
+   constructor(userRepo: UserBaseRepo<UserWithId>) {
       if (!userRepo) {
          throw new ResourceNotInitializedError("User repository must be provided to AuthService");
       }
       this.userRepo = userRepo;
    }
 
-   private generateToken(user: UserDocument): string {
+   private generateToken(user: UserWithId): string {
       const payload = {
          id: user._id.toString(),
          role: user.role,
          permissions: user.permissions ?? DEFAULT_PERMISSIONS,
+         clientId: user.clientId ? user.clientId.toString() : undefined,
       };
 
       return this.jwtUtils.generateToken(payload, globalConfig.jwt.secret, globalConfig.jwt.expiresIn);
    }
 
-   private formatUserResponseWithoutPassword(user: UserDocument): Omit<User, "password"> {
-      const userObj = user.toObject ? user.toObject() : { ...user };
-      const { password, ...rest } = userObj;
+   private formatUserResponseWithoutPassword(user: User): Omit<User, "password" | "trash" | "isActive"> {
+      const { password, trash, isActive, ...rest } = user;
       return rest;
+   }
+
+   private async checkExists(field: "email" | "username", payload: Partial<User>, isSuperAdmin: boolean = false) {
+      if (!field) return;
+
+      const exists =
+         field === "email"
+            ? await this.userRepo.findIfAnyExists(isSuperAdmin, payload.email!)
+            : await this.userRepo.findByUsername(payload.username!, true);
+
+      if (exists) {
+         const message =
+            field === "email"
+               ? isSuperAdmin
+                  ? "Super admin already exists."
+                  : "User with this email already exists."
+               : "User with this username already exists.";
+
+         throw new PermissionNotGranted(message);
+      }
    }
 
    private async createUser(
@@ -52,39 +76,20 @@ export class AuthService {
          uniqueBy?: UniqueCheck;
          isSuperAdmin?: boolean;
       },
-   ): Promise<UserDocument> {
+   ): Promise<UserWithId> {
       const { uniqueBy = "email", isSuperAdmin = false } = options || {};
 
-      if (uniqueBy === "email" || uniqueBy === "both") {
-         if (payload.email) {
-            const emailExists = await this.userRepo.findIfAnyExists(isSuperAdmin, payload.email);
+      if (uniqueBy === "email" || uniqueBy === "both") await this.checkExists("email", payload, isSuperAdmin);
+      if (uniqueBy === "username" || uniqueBy === "both") await this.checkExists("username", payload, isSuperAdmin);
 
-            if (emailExists) {
-               throw new PermissionNotGranted(
-                  isSuperAdmin ? "Super admin already exists." : "User with this email already exists.",
-               );
-            }
-         }
-      }
-
-      if (uniqueBy === "username" || uniqueBy === "both") {
-         if (payload.username) {
-            const usernameExists = await this.userRepo.findByUsername(payload.username);
-
-            if (usernameExists) {
-               throw new PermissionNotGranted("User with this username already exists.");
-            }
-         }
-      }
-
-      const user = (await this.userRepo.create(payload)) as UserDocument;
+      const user = (await this.userRepo.create(payload)) as UserWithId;
 
       logger.info(`${isSuperAdmin ? "Super admin" : "User"} created: ${user.email}`);
 
       return user;
    }
 
-   async onboardSuperAdmin(superAdminData: Partial<User>): Promise<{ user: Omit<User, "password">; token: string }> {
+   async onboardSuperAdmin(superAdminData: Partial<UserWithId>): Promise<{ user: UserResponseDto; token: string }> {
       try {
          const user = await this.createUser(superAdminData, {
             uniqueBy: "email",
@@ -94,7 +99,7 @@ export class AuthService {
          const token = this.generateToken(user);
 
          return {
-            user: this.formatUserResponseWithoutPassword(user),
+            user: new UserResponseDto(user),
             token,
          };
       } catch (error) {
@@ -103,7 +108,7 @@ export class AuthService {
       }
    }
 
-   async register(userData: RegistrationDTOType): Promise<Omit<User, "password">> {
+   async register(userData: RegistrationDTOType): Promise<UserResponseDto> {
       try {
          const payload: Partial<User> = {
             email: userData.email,
@@ -116,14 +121,14 @@ export class AuthService {
             uniqueBy: "both",
          });
 
-         return this.formatUserResponseWithoutPassword(user);
+         return new UserResponseDto(user);
       } catch (error) {
          logger.error("User registration failed", { error });
          throw error;
       }
    }
 
-   async login(loginData: { email: string; password: string }): Promise<{ user: Omit<User, "password">; token: string }> {
+   async login(loginData: { email: string; password: string }): Promise<{ user: UserResponseDto; token: string }> {
       try {
          const user = await this.userRepo.findByEmail(loginData.email);
 
@@ -144,12 +149,12 @@ export class AuthService {
             throw new PermissionNotGranted("Invalid email or password.");
          }
 
-         const token = this.generateToken(user as UserDocument);
+         const token = this.generateToken(user as UserWithId);
 
          logger.info(`User logged in: ${user.email}`);
 
          return {
-            user: this.formatUserResponseWithoutPassword(user as UserDocument),
+            user: new UserResponseDto(user as UserWithId),
             token,
          };
       } catch (error) {
@@ -158,12 +163,17 @@ export class AuthService {
       }
    }
 
-   async getProfile(userId: string): Promise<Omit<User, "password">> {
-      const user = (await this.userRepo.findById(userId)) as UserDocument;
+   async getProfile(userId: string): Promise<Omit<User, "password" | "trash" | "isActive">> {
+      const user = await this.userRepo.findById(userId);
       if (!user) {
          logger.warn(`User not found for profile: ${userId}`);
          throw new PermissionNotGranted("User not found.");
       }
       return this.formatUserResponseWithoutPassword(user);
+   }
+
+   async isSuperAdmin(id: string): Promise<boolean> {
+      const role = await this.userRepo.findUserRole(id);
+      return role === USER_ROLE.SUPER_ADMIN;
    }
 }

@@ -19,7 +19,6 @@ const clientSchema = new mongoose.Schema(
       email: {
          type: String,
          required: true,
-         unique: true,
          trim: true,
          lowercase: true,
          validate: {
@@ -27,6 +26,15 @@ const clientSchema = new mongoose.Schema(
                return /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/.test(e);
             },
          },
+      },
+
+      slug: {
+         type: String,
+         required: true,
+         unique: true,
+         trim: true,
+         lowercase: true,
+         match: /^[a-z0-9-]+$/,
       },
 
       description: {
@@ -60,23 +68,6 @@ const clientSchema = new mongoose.Schema(
             min: 2,
             max: 365,
          },
-
-         //   Create seperate Modals for alerting
-         //   alerting: {
-         //      type: Boolean,
-         //      default: false,
-         //   },
-         //   alertingEmail: {
-         //      type: String,
-         //      trim: true,
-         //      lowercase: true,
-         //      validate: {
-         //         validator: function (e: string) {
-         //            if (e.length === 0) return true; // If email is empty, consider it valid
-         //            return /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/.test(e);
-         //         },
-         //      },
-         //   },
          timezone: {
             type: String,
             default: "UTC",
@@ -99,10 +90,10 @@ const clientSchema = new mongoose.Schema(
    },
 );
 
-clientSchema.index({ email: 1 });
+clientSchema.index({ slug: 1 });
 clientSchema.index({ isActive: 1 });
 
-type Client = InferSchemaType<typeof clientSchema>;
+export type Client = InferSchemaType<typeof clientSchema>;
 
 export type ClientDocument = HydratedDocument<Client>;
 

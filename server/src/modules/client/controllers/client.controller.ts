@@ -44,7 +44,11 @@ export class ClientController {
          if (!clientId) {
             return res.status(400).json(ResponseFormatter.error("Client ID is required.", 400));
          }
-         return res.status(201).json(ResponseFormatter.success("Client user created successfully.", 201));
+         if (typeof clientId !== "string") {
+            return res.status(400).json(ResponseFormatter.error("Client ID must be a string.", 400));
+         }
+         const result = await this.clientService.createClientUser(clientId,req.body,req.user!);
+         return res.status(201).json(ResponseFormatter.success("Client user created successfully.", 201, { user: result }));
       } catch (error) {
          next(error);
       }

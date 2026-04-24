@@ -9,13 +9,13 @@ import { UserInsideAuthorizedRequest } from "../../../shared/typings/base.typing
 import crypto from "crypto";
 import { CreateApiKeyResponseDto } from "../dtos/createApiKeyResponse.dto";
 import { ClientBaseRepo } from "../repos/clientBase.repo";
-import { Client } from "../../../shared/models/client.model";
+import { Client, ClientWithId } from "../../../shared/models/client.model";
 
 export class ApiKeyService {
    protected apiKeyRepo: ApiKeyBaseRepo<ApiKeyWithId>;
-   protected clientRepo: ClientBaseRepo<Client>;
+   protected clientRepo: ClientBaseRepo<ClientWithId>;
 
-   constructor(apiKeyRepo: ApiKeyBaseRepo<ApiKeyWithId>, clientRepo: ClientBaseRepo<Client>) {
+   constructor(apiKeyRepo: ApiKeyBaseRepo<ApiKeyWithId>, clientRepo: ClientBaseRepo<ClientWithId>) {
       if (!apiKeyRepo) {
          throw new ResourceNotInitializedError("API Key repository must be provided");
       }
@@ -34,7 +34,7 @@ export class ApiKeyService {
 
       return {
          keyId: `${prefix}_${keyId}`,
-         keyValue: `${prefix}_${secret}`,
+         keyValue: `${secret}`,
       };
    }
 
@@ -42,6 +42,13 @@ export class ApiKeyService {
       return crypto.createHash("sha256").update(key).digest("hex");
    }
 
+   /**
+    *
+    * @param clientId
+    * @param body
+    * @param createdBy
+    * Only get the api key value once.
+    */
    async createApiKeysForClient(
       clientId: string,
       body: CreateApiKeyDtoType,
@@ -123,6 +130,36 @@ export class ApiKeyService {
          return safeapikey;
       } catch (error) {
          logger.error("Error retrieving API key for client", { error, clientId, apiKeyId, requestedBy });
+         throw error;
+      }
+   }
+
+   async getClientFromApiKey(apiKeyValue: string): Promise<{ client: ClientWithId; apiKeyDoc: ApiKeyWithId } | null> {
+      try {
+         const hashedKeyValue = this.hashApiKey(apiKeyValue);
+
+         const apiKeyDoc = await this.apiKeyRepo.findByKeyValue(hashedKeyValue, true, true);
+
+         if (!apiKeyDoc) {
+            throw new InvalidInputError("Invalid or expired API key");
+         }
+
+         if (!apiKeyDoc.clientId) {
+            throw new InvalidInputError("API key not linked to client");
+         }
+
+         const client = await this.clientRepo.findById(apiKeyDoc.clientId.toString(), true);
+
+         if (!client) {
+            throw new InvalidInputError("Client not found");
+         }
+
+         return { client, apiKeyDoc };
+      } catch (error) {
+         logger.error("Error retrieving client from API key", {
+            error,
+            apiKeyValue,
+         });
          throw error;
       }
    }

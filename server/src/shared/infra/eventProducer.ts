@@ -7,15 +7,16 @@ import {
    PublishingEventDataType,
    PublishingMessageType,
    PublishOptions,
-} from "../typings/infra.typings";
-import { CircuitBreaker } from "./circuitBreaker";
-import { ConfirmChannelManager } from "./confirmChannelManager";
-import { RetryStrategy } from "./retryStrategy";
+} from "../typings/messaging.typings";
+import { CircuitBreakerStatsType } from "../typings/circuitBreaker.typings"; 
+import { IConfirmChannelManager } from "../contracts/infra/IConfirmManager.contract";
+import { ICircuitBreaker } from "../contracts/infra/ICircuitBreaker.contract";
+import { IRetryStrategy } from "../contracts/infra/IRetryStrategy.contract";
 
 export class EventProducer {
-   private channelManager: ConfirmChannelManager;
-   private circuitBreaker: CircuitBreaker;
-   private retryStrategy: RetryStrategy;
+   private channelManager: IConfirmChannelManager;
+   private circuitBreaker: ICircuitBreaker;
+   private retryStrategy: IRetryStrategy;
    private queueName: string;
    private isShutingDown: boolean = false;
    private metrics: EventProducerMetricsType = {
@@ -25,9 +26,9 @@ export class EventProducer {
    };
 
    constructor(
-      channelManager: ConfirmChannelManager,
-      circuitBreaker: CircuitBreaker,
-      retryStrategy: RetryStrategy,
+      channelManager: IConfirmChannelManager,
+      circuitBreaker: ICircuitBreaker,
+      retryStrategy: IRetryStrategy,
       queueName: string,
    ) {
       this.channelManager = channelManager;
@@ -107,7 +108,7 @@ export class EventProducer {
       }
    }
 
-   async shutDown() {
+   async shutDown(): Promise<void> {
       try {
          this.isShutingDown = true;
          logger.info("[EventProducer] Shutdown initiated, no new messages will be published", {
@@ -126,10 +127,10 @@ export class EventProducer {
       }
    }
 
-   get Metrics() {
+   getMetrics(): { metrics: EventProducerMetricsType; circuitBreakerStats: CircuitBreakerStatsType } {
       return {
          metrics: { ...this.metrics },
-         circuitBreakerStats: this.circuitBreaker.Stats,
+         circuitBreakerStats: this.circuitBreaker.getStats(),
       };
    }
 
@@ -148,7 +149,7 @@ export class EventProducer {
             queue: this.queueName,
             messageId: eventData.messageId,
             correlationId: eventData.correlationId,
-            state: this.circuitBreaker.currentState,
+            state: this.circuitBreaker.getCurrentState(),
          });
          throw new ResourceNotInitializedError("Circuit breaker is rejecting publish request");
       }
@@ -210,3 +211,4 @@ export class EventProducer {
       }
    }
 }
+

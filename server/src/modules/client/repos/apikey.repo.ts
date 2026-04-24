@@ -63,7 +63,7 @@ export class MongoApiKeyRepo extends ApiKeyBaseRepo<ApiKeyWithId> {
             filter.expiresAt = { $gt: now };
          }
 
-         const apiKey = await this.model.findOne(filter).select("-__v").populate("clientId");
+         const apiKey = await this.model.findOne(filter).select("-__v").lean();
          return apiKey;
       } catch (error) {
          logger.error(`Error finding API key by key value: ${keyValue}`, { error });

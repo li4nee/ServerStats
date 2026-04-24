@@ -1,5 +1,4 @@
 import { globalConfig } from "../config/global.config";
-import { CircuitBreakerOptions, RetryStrategyOptions } from "../typings/infra.typings";
 import { CircuitBreaker } from "./circuitBreaker";
 import { AmqpConnection, ConfirmChannelManager } from "./confirmChannelManager";
 import { EventProducer } from "./eventProducer";
@@ -7,6 +6,8 @@ import { RetryStrategy } from "./retryStrategy";
 import amqpConnection from "../config/amqp.config";
 import { ChannelModel } from "amqplib";
 import { ResourceNotInitializedError } from "../typings/error.typings";
+import { RetryStrategyOptions } from "../typings/retry.typings";
+import { CircuitBreakerOptions } from "../typings/circuitBreaker.typings";
 
 
 export const amqpAdapter: AmqpConnection = {
@@ -27,7 +28,7 @@ export const amqpAdapter: AmqpConnection = {
    },
 };
 
-class EventProducerContainer {
+export class EventProducerContainer {
    static init(amqp: AmqpConnection): EventProducer {
       let circuitBreakerOptions: CircuitBreakerOptions = {
          failureThreshold: globalConfig.infra.circuitBreakerFailureThreshold || 5,
@@ -50,6 +51,4 @@ class EventProducerContainer {
    }
 }
 
-
-export const InitializedEventProducer = EventProducerContainer.init(amqpAdapter);
 

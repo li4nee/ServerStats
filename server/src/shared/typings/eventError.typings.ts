@@ -17,3 +17,15 @@ export class CircuitBreakerOpenError extends EventProducerError {
       super(message, ErrorCode.CIRCUIT_BREAKER_OPEN, ErrorHttpStatusCode.CIRCUIT_BREAKER_OPEN);
    }
 }
+
+export class MaxRetriesExceededError extends EventProducerError {
+   constructor(message = "Max retry attempts exceeded for message") {
+      super(message, ErrorCode.MAX_RETRIES_EXCEEDED, 500);
+   }
+}
+
+export class MessagePublishError extends EventProducerError {
+   constructor(message = "Failed to publish message") {
+      super(message, ErrorCode.MESSAGE_PUBLISH_FAILED, 500);
+   }
+}

@@ -69,6 +69,9 @@ export class CircuitBreaker {
       this.halfOpenSuccessCount = 0;
    }
 
+   /**
+    * Checks if Open can now move to half open upon cooldown completion,
+    */
    private moveToHalfOpenIfReady(): void {
       if (this.state === CircuitBreakerState.OPEN && this.cooldownTimePassed()) {
          this.transitionStateTo(CircuitBreakerState.HALF_OPEN);
@@ -76,7 +79,7 @@ export class CircuitBreaker {
    }
 
    /**
-    * Returns the current state of the circuit breaker. If the circuit is OPEN and the cooldown time has passed, it transitions to HALF_OPEN before returning the state.
+    * Returns the current state of the circuit breaker.
     */
    getCurrentState(): CircuitBreakerState {
       this.moveToHalfOpenIfReady();
@@ -84,7 +87,7 @@ export class CircuitBreaker {
    }
 
    /**
-    * Returms true is sending request is allowed rn.
+    * Returms true if sending request is allowed rn.
     */
    isRequestAllowed(): boolean {
       this.moveToHalfOpenIfReady();

@@ -1,3 +1,4 @@
+import { globalConfig } from "../../../shared/config/global.config";
 import logger from "../../../shared/config/logger.config";
 import { ApiHitsWithId } from "../../../shared/infra/db/mongo/models/apiHits.model";
 import { EndpointMetrics } from "../../../shared/infra/db/postgres/postgresTypes";
@@ -16,6 +17,8 @@ export enum TimeBucketInterval {
 export class ProcessorService {
    private apiHitRepo: ApiHitsBaseRepo<ApiHitsWithId>;
    private endPointMetricsRepo: EndPointMetricsBaseRepo<EndpointMetrics>;
+
+   private postgresUpsertRetryAttempts: number = globalConfig.consumer.postGresMetricUpsertRetryAttempts;
    constructor(apiHitRepo: ApiHitsBaseRepo<ApiHitsWithId>, endPointMetricsRepo: EndPointMetricsBaseRepo<EndpointMetrics>) {
       if (!apiHitRepo) {
          throw new ResourceNotInitializedError("[ProcessorService] ApiHits repository must be provided to ProcessorService");
@@ -76,21 +79,25 @@ export class ProcessorService {
          updated_at: new Date(),
       };
       let lastError = null;
-      for (let attempt = 0; attempt < 2; attempt++) {
+      for (let attempt = 0; attempt < this.postgresUpsertRetryAttempts; attempt++) {
          try {
             await this.endPointMetricsRepo.upsertEndpointMetrics(metrixData);
             return;
          } catch (error) {
             lastError = error;
-            logger.warn(`[ProcessorService] Attempt ${attempt + 1} failed to upsert metrics for event ${eventData.eventId}. Error: ${error instanceof Error ? error.stack : error}`);
-            // 1 second delay before retrying . This to handle transient temporary issuses like db ko connection glitch or something like that.
+            logger.warn(
+               `[ProcessorService] Attempt ${attempt + 1} failed to upsert metrics for event ${eventData.eventId}. Error: ${error instanceof Error ? error.stack : error}`,
+            );
+            // 5 second delay before retrying . This to handle transient temporary issuses like db ko connection glitch or something like that.
             if (attempt < 1) {
-               await new Promise((resolve) => setTimeout(resolve, 1000));
+               await new Promise((resolve) => setTimeout(resolve, 5000));
             }
          }
       }
       if (lastError) {
-         logger.error(`[ProcessorService] Failed to upsert metrics after 2 attempts for event ${eventData.eventId}. Error: ${lastError instanceof Error ? lastError.stack : lastError}`);
+         logger.error(
+            `[ProcessorService] Failed to upsert metrics after ${this.postgresUpsertRetryAttempts} attempts for event ${eventData.eventId}. Error: ${lastError instanceof Error ? lastError.stack : lastError}`,
+         );
          throw lastError;
       }
    }
@@ -147,7 +154,7 @@ export class ProcessorService {
          await this.apiHitRepo.deleteOldApiHits(cutoffDate);
          logger.info(`[ProcessorService] Old metrics older than ${cutoffDate} deleted successfully.`);
       } catch (error) {
-         logger.error(`[ProcessorService] Failed to delete old metrics older than ${cutoffDate}.`,{
+         logger.error(`[ProcessorService] Failed to delete old metrics older than ${cutoffDate}.`, {
             error: error instanceof Error ? error.stack : error,
          });
          throw error;

@@ -104,6 +104,25 @@ services:
       timeout: 5s
       retries: 5
 
+  consumer:
+    container_name: server-monitoring-consumer
+    build:
+      context: .
+      dockerfile: Dockerfile.consumer
+    env_file: .env
+    networks:
+      - website-monitoring-network
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - .:/app
+
 volumes:
   postgres_data:
     driver: local

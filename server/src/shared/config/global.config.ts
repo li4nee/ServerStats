@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import { mongo } from "mongoose";
 import { StringValue } from "ms";
 dotenv.config();
 
@@ -58,6 +59,32 @@ export const globalConfig = {
       retryDelay: parseInt(process.env.RABBITMQ_RETRY_DELAY || "1000", 10), // ms ma ho yo base retry delay.
       maxRetryDelay: parseInt(process.env.RABBITMQ_MAX_RETRY_DELAY || "30000", 10), // ms ma ho yo max retry delay.
       jitterFactor: parseFloat(process.env.RABBITMQ_JITTER_FACTOR || "0.3"), // 0.3 means add up to 30% random jitter to avoid thundering herd problem
+   },
+
+   consumer: {
+      mongoPostgresConnectionMaxRetryAttemptsInConsumer: parseInt(
+         process.env.MONGO_POSTGRES_MAX_RETRY_ATTEMPTS_IN_CONSUMER || "5",
+         10,
+      ),
+      // How many message one consumer instance can process before acknoledging them.
+      prefetchCount: parseInt(process.env.CONSUMER_PREFETCH_COUNT || "20", 10),
+      // We don't mind if postgres upsert will fail sometimes since we have raw logs in MongoDb and then can calculate
+      // But if we want to retry then how many times we want to retry.
+      postGresMetricUpsertRetryAttempts: parseInt(process.env.CONSUMER_POSTGRES_METRIC_UPSERT_RETRY_ATTEMPTS || "2", 10),
+
+      // To prevent memory leak we will keep track of processed event IDs in memory and if the same event ID comes again we will ignore it.
+      // This is for idempotency
+      maxProcessedEventIdsCacheSize: parseInt(process.env.CONSUMER_MAX_PROCESSED_EVENT_IDS_CACHE_SIZE || "10000", 10),
+
+      // To find the poison event type causing continuous failure in consumer.
+      failureThresholdForEventTypeInConsumer: parseInt(process.env.CONSUMER_FAILURE_THRESHOLD_FOR_EVENT_TYPE || "10", 10),
+
+      eventConsumerStrategyRetryStrategyOptions: {
+         maxRetries: parseInt(process.env.EVENT_CONSUMER_STARTUP_RETRY_STRATEGY_MAX_RETRIES || "5", 10),
+         baseRetryDelayInMs: parseInt(process.env.EVENT_CONSUMER_STARTUP_RETRY_STRATEGY_BASE_RETRY_DELAY_IN_MS || "1000", 10), // 1 second
+         maxRetryDelayInMs: parseInt(process.env.EVENT_CONSUMER_STARTUP_RETRY_STRATEGY_MAX_RETRY_DELAY_IN_MS || "30000", 10), // 30 seconds
+         jitterFactor: parseFloat(process.env.EVENT_CONSUMER_STARTUP_RETRY_STRATEGY_JITTER_FACTOR || "0.3"), // 0.3 means add up to 30% random jitter to avoid thundering herd problem
+      },
    },
 
    cookieOptions: {

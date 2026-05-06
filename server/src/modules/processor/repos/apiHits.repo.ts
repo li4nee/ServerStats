@@ -61,7 +61,7 @@ export class MongoApiHitsRepo extends ApiHitsBaseRepo<ApiHitsWithId> {
          throw error;
       }
    }
-   
+
    async deleteOldApiHits(olderThan: Date): Promise<void> {
       try {
          await this.model.deleteMany({ createdAt: { $lt: olderThan } });

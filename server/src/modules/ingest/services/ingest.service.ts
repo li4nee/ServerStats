@@ -1,5 +1,5 @@
 import { IEventProducer } from "../../../shared/contracts/infra/messaging/IEventProducer.contract";
-import { EventDataType } from "../../../shared/typings/messaging.typings";
+import { EventDataType, EventType } from "../../../shared/typings/messaging.typings";
 import { ApiHitDataDtoType } from "../dtos/hitData.dto";
 import { v4 as uuidv4 } from "uuid";
 import { IngestApiHitResponseDto } from "../dtos/ingestApiHitResponse.dto";
@@ -41,6 +41,7 @@ export class IngestService {
             messageId: publishOptions.messageId,
             correlationId: publishOptions.correlationId,
             attempts: 0,
+            eventType: EventType.API_HITS,
             timeStamp: new Date().toISOString(),
          };
 

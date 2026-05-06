@@ -4,7 +4,7 @@ import { EventDataType } from "../../../shared/typings/messaging.typings";
  * Base repository for Api Hits, defining the contract for data access operations.
  */
 export abstract class ApiHitsBaseRepo<T> {
-   abstract createApiHit(eventData:EventDataType): Promise<T>;
+   abstract createApiHit(eventData: EventDataType): Promise<T>;
    abstract findWithFilters(
       filters: Partial<T>,
       limit: number,

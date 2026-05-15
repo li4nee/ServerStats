@@ -24,3 +24,21 @@ export interface OverviewStats {
    avg_latency: number;
    unique_endpoints: number;
 }
+
+export interface RawLogEntry {
+   eventId: string;
+   timestamp: Date;
+   serviceName: string;
+   endpoint: string;
+   method: string;
+   statusCode: number;
+   latencyInMs: number;
+   ipV4?: string;
+   ipV6?: string;
+   userAgent?: string;
+}
+
+export interface RawLogsPage {
+   logs: RawLogEntry[];
+   nextCursor: string | null;
+}

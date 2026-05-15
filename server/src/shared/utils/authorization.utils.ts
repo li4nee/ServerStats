@@ -44,6 +44,24 @@ export class AuthorizationUtils {
       throw new InvalidInputError("You are not authorized to create API keys for clients.");
    }
 
+   static canViewRawLogs(user: UserInsideAuthorizedRequest, targetClientId: string): boolean {
+      if (user.role === USER_ROLE.SUPER_ADMIN) {
+         return true;
+      }
+
+      if (user.role === USER_ROLE.CLIENT_ADMIN || user.role === USER_ROLE.CLIENT_USER) {
+         if (!user.clientId || user.clientId !== targetClientId) {
+            throw new PermissionNotGranted("You are not authorized to view raw logs for this client.");
+         }
+         if (!user.permissions.canViewRawLogs) {
+            throw new PermissionNotGranted("You do not have permission to view raw logs.");
+         }
+         return true;
+      }
+
+      throw new PermissionNotGranted("You are not authorized to view raw logs.");
+   }
+
    static canViewAnalytics(user: UserInsideAuthorizedRequest, targetClientId: string): boolean {
       // Super admin has full access to all clients.
       if (user.role === USER_ROLE.SUPER_ADMIN) {

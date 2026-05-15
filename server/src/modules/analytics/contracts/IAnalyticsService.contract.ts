@@ -1,6 +1,6 @@
 import { UserInsideAuthorizedRequest } from "../../../shared/typings/auth.typings";
-import { AnalyticsTimeRangeQueryDTOType, AnalyticsTimeSeriesQueryDTOType } from "../dtos/analyticsQuery.dto";
-import { EndpointSummary, OverviewStats, TimeSeriesBucket } from "../dtos/analyticsResponse.dto";
+import { AnalyticsTimeRangeQueryDTOType, AnalyticsTimeSeriesQueryDTOType, EndpointDrilldownQueryDTOType, RawLogsQueryDTOType } from "../dtos/analyticsQuery.dto";
+import { EndpointSummary, OverviewStats, RawLogsPage, TimeSeriesBucket } from "../dtos/analyticsResponse.dto";
 
 export interface IAnalyticsService {
    getOverview(user: UserInsideAuthorizedRequest, clientId: string, startTime?: Date, endTime?: Date): Promise<OverviewStats>;
@@ -8,4 +8,6 @@ export interface IAnalyticsService {
    getTopEndpointsByErrors(user: UserInsideAuthorizedRequest, query: AnalyticsTimeRangeQueryDTOType): Promise<EndpointSummary[]>;
    getTopEndpointsByLatency(user: UserInsideAuthorizedRequest, query: AnalyticsTimeRangeQueryDTOType): Promise<EndpointSummary[]>;
    getTimeSeries(user: UserInsideAuthorizedRequest, query: AnalyticsTimeSeriesQueryDTOType): Promise<TimeSeriesBucket[]>;
+   getRawLogs(user: UserInsideAuthorizedRequest, query: RawLogsQueryDTOType): Promise<RawLogsPage>;
+   getEndpointDrilldown(user: UserInsideAuthorizedRequest, query: EndpointDrilldownQueryDTOType): Promise<TimeSeriesBucket[]>;
 }

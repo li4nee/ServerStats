@@ -4,7 +4,7 @@ import { authorize } from "../../../shared/middleware/authorize.middleware";
 import { validateQuery } from "../../../shared/middleware/zodValidators.middleware";
 import { USER_ROLE } from "../../../shared/typings/auth.typings";
 import AnalyticsDependencyContainer from "../dependencies/analytics.dependency";
-import { AnalyticsTimeRangeQueryDTO, AnalyticsTimeSeriesQueryDTO } from "../dtos/analyticsQuery.dto";
+import { AnalyticsTimeRangeQueryDTO, AnalyticsTimeSeriesQueryDTO, EndpointDrilldownQueryDTO, RawLogsQueryDTO } from "../dtos/analyticsQuery.dto";
 
 const router = Router();
 const { analyticsController } = AnalyticsDependencyContainer.init().controllers;
@@ -72,6 +72,32 @@ router.get(
    authorize([USER_ROLE.SUPER_ADMIN, USER_ROLE.CLIENT_ADMIN, USER_ROLE.CLIENT_USER]),
    validateQuery(AnalyticsTimeSeriesQueryDTO),
    (req: Request, res: Response, next: NextFunction) => analyticsController.getTimeSeries(req, res, next),
+);
+
+/**
+ * @route GET /api/v1/analytics/logs
+ * @desc Get paginated raw API hit logs for a client with optional filters
+ * @access Private (Super Admin, Client Admin, Client User with canViewRawLogs)
+ */
+router.get(
+   "/logs",
+   authenticate,
+   authorize([USER_ROLE.SUPER_ADMIN, USER_ROLE.CLIENT_ADMIN, USER_ROLE.CLIENT_USER]),
+   validateQuery(RawLogsQueryDTO),
+   (req: Request, res: Response, next: NextFunction) => analyticsController.getRawLogs(req, res, next),
+);
+
+/**
+ * @route GET /api/v1/analytics/endpoint
+ * @desc Get hourly time-series drilldown for a specific endpoint
+ * @access Private (Super Admin, Client Admin, Client User with canViewAnalytics)
+ */
+router.get(
+   "/endpoint",
+   authenticate,
+   authorize([USER_ROLE.SUPER_ADMIN, USER_ROLE.CLIENT_ADMIN, USER_ROLE.CLIENT_USER]),
+   validateQuery(EndpointDrilldownQueryDTO),
+   (req: Request, res: Response, next: NextFunction) => analyticsController.getEndpointDrilldown(req, res, next),
 );
 
 export default router;

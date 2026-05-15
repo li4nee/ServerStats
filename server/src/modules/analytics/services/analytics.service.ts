@@ -3,19 +3,26 @@ import { ResourceNotInitializedError } from "../../../shared/typings/error.typin
 import { EndpointMetrics } from "../../../shared/infra/db/postgres/postgresTypes";
 import { UserInsideAuthorizedRequest } from "../../../shared/typings/auth.typings";
 import { AuthorizationUtils } from "../../../shared/utils/authorization.utils";
+import { ApiHitsBaseRepo } from "../../processor/repos/apiHitsBase.repo";
+import { ApiHitsWithId } from "../../../shared/infra/db/mongo/models/apiHits.model";
 import { EndPointMetricsBaseRepo } from "../../processor/repos/endpointMetricsBase.repo";
 import { IAnalyticsService } from "../contracts/IAnalyticsService.contract";
-import { AnalyticsTimeRangeQueryDTOType, AnalyticsTimeSeriesQueryDTOType } from "../dtos/analyticsQuery.dto";
-import { EndpointSummary, OverviewStats, TimeSeriesBucket } from "../dtos/analyticsResponse.dto";
+import { AnalyticsTimeRangeQueryDTOType, AnalyticsTimeSeriesQueryDTOType, EndpointDrilldownQueryDTOType, RawLogsQueryDTOType } from "../dtos/analyticsQuery.dto";
+import { EndpointSummary, OverviewStats, RawLogsPage, TimeSeriesBucket } from "../dtos/analyticsResponse.dto";
 
 export class AnalyticsService implements IAnalyticsService {
    private endPointMetricsRepo: EndPointMetricsBaseRepo<EndpointMetrics>;
+   private apiHitsRepo: ApiHitsBaseRepo<ApiHitsWithId>;
 
-   constructor(endPointMetricsRepo: EndPointMetricsBaseRepo<EndpointMetrics>) {
+   constructor(endPointMetricsRepo: EndPointMetricsBaseRepo<EndpointMetrics>, apiHitsRepo: ApiHitsBaseRepo<ApiHitsWithId>) {
       if (!endPointMetricsRepo) {
          throw new ResourceNotInitializedError("[AnalyticsService] EndpointMetrics repository must be provided to AnalyticsService");
       }
+      if (!apiHitsRepo) {
+         throw new ResourceNotInitializedError("[AnalyticsService] ApiHits repository must be provided to AnalyticsService");
+      }
       this.endPointMetricsRepo = endPointMetricsRepo;
+      this.apiHitsRepo = apiHitsRepo;
    }
 
    private mapToEndpointSummary(rows: EndpointMetrics[]): EndpointSummary[] {
@@ -105,6 +112,37 @@ export class AnalyticsService implements IAnalyticsService {
          return await this.endPointMetricsRepo.getTimeSeries(query.clientId, query.startTime, query.endTime, query.serviceName);
       } catch (error) {
          logger.error("[AnalyticsService] Error fetching time series", { error, query });
+         throw error;
+      }
+   }
+
+   async getRawLogs(user: UserInsideAuthorizedRequest, query: RawLogsQueryDTOType): Promise<RawLogsPage> {
+      try {
+         AuthorizationUtils.canViewRawLogs(user, query.clientId);
+         logger.info(`[AnalyticsService] Fetching raw logs for clientId: ${query.clientId}`);
+         return await this.apiHitsRepo.findRawLogs(query);
+      } catch (error) {
+         logger.error("[AnalyticsService] Error fetching raw logs", { error, query });
+         throw error;
+      }
+   }
+
+   async getEndpointDrilldown(user: UserInsideAuthorizedRequest, query: EndpointDrilldownQueryDTOType): Promise<TimeSeriesBucket[]> {
+      try {
+         AuthorizationUtils.canViewAnalytics(user, query.clientId);
+         logger.info(
+            `[AnalyticsService] Fetching endpoint drilldown for clientId: ${query.clientId} endpoint: ${query.endpoint}`,
+         );
+         return await this.apiHitsRepo.getEndpointTimeSeries(
+            query.clientId,
+            query.serviceName,
+            query.endpoint,
+            query.method,
+            query.startTime,
+            query.endTime,
+         );
+      } catch (error) {
+         logger.error("[AnalyticsService] Error fetching endpoint drilldown", { error, query });
          throw error;
       }
    }

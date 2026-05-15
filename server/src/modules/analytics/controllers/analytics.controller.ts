@@ -3,7 +3,7 @@ import { AuthorizedRequest } from "../../../shared/typings/auth.typings";
 import { ResourceNotInitializedError } from "../../../shared/typings/error.typings";
 import { ResponseFormatter } from "../../../shared/utils/responseFormatter.utils";
 import { IAnalyticsService } from "../contracts/IAnalyticsService.contract";
-import { AnalyticsTimeRangeQueryDTOType, AnalyticsTimeSeriesQueryDTOType } from "../dtos/analyticsQuery.dto";
+import { AnalyticsTimeRangeQueryDTOType, AnalyticsTimeSeriesQueryDTOType, EndpointDrilldownQueryDTOType, RawLogsQueryDTOType } from "../dtos/analyticsQuery.dto";
 
 export class AnalyticsController {
    protected analyticsService: IAnalyticsService;
@@ -77,6 +77,32 @@ export class AnalyticsController {
          const query = req.query as unknown as AnalyticsTimeSeriesQueryDTOType;
          const buckets = await this.analyticsService.getTimeSeries(req.user!, query);
          return res.status(200).json(ResponseFormatter.success("Time series data retrieved successfully.", 200, { buckets }));
+      } catch (error) {
+         next(error);
+      }
+   }
+
+   /**
+    * GET /api/v1/analytics/logs?clientId=&serviceName=&endpoint=&method=&statusCode=&startTime=&endTime=&limit=&cursor=
+    */
+   async getRawLogs(req: AuthorizedRequest, res: Response, next: NextFunction) {
+      try {
+         const query = req.query as unknown as RawLogsQueryDTOType;
+         const result = await this.analyticsService.getRawLogs(req.user!, query);
+         return res.status(200).json(ResponseFormatter.success("Raw logs retrieved successfully.", 200, result));
+      } catch (error) {
+         next(error);
+      }
+   }
+
+   /**
+    * GET /api/v1/analytics/endpoint?clientId=&serviceName=&endpoint=&method=&startTime=&endTime=
+    */
+   async getEndpointDrilldown(req: AuthorizedRequest, res: Response, next: NextFunction) {
+      try {
+         const query = req.query as unknown as EndpointDrilldownQueryDTOType;
+         const buckets = await this.analyticsService.getEndpointDrilldown(req.user!, query);
+         return res.status(200).json(ResponseFormatter.success("Endpoint drilldown retrieved successfully.", 200, { buckets }));
       } catch (error) {
          next(error);
       }

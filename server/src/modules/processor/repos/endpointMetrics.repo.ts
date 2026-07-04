@@ -3,6 +3,7 @@ import { sql } from "kysely";
 import { EndpointMetrics } from "../../../shared/infra/db/postgres/postgresTypes";
 import { EndPointMetricsBaseRepo } from "./endpointMetricsBase.repo";
 import logger from "../../../shared/config/logger.config";
+import { OverviewStats, TimeSeriesBucket } from "../../../modules/analytics/dtos/analyticsResponse.dto";
 
 export class PgEndPointMetricsRepo extends EndPointMetricsBaseRepo<EndpointMetrics> {
    /** Upserts endpoint metrics into PostgreSQL. */
@@ -133,6 +134,7 @@ export class PgEndPointMetricsRepo extends EndPointMetricsBaseRepo<EndpointMetri
       metric: keyof EndpointMetrics,
       limit: number,
       startTime?: Date,
+      endTime?: Date,
       clientId?: string,
    ): Promise<EndpointMetrics[]> {
       try {
@@ -143,16 +145,16 @@ export class PgEndPointMetricsRepo extends EndPointMetricsBaseRepo<EndpointMetri
             .orderBy(metric, "desc")
             .limit(safeLimit);
 
-         // By default, only consider data from the last 24 hours.
          if (!startTime) {
             startTime = new Date(Date.now() - 24 * 60 * 60 * 1000);
          }
 
-         if (startTime) {
-            query = query.where("time_bucket", ">=", startTime);
+         query = query.where("time_bucket", ">=", startTime);
+
+         if (endTime) {
+            query = query.where("time_bucket", "<=", endTime);
          }
 
-         // If clientId is not provided, return metrics for all clients.
          if (clientId) {
             query = query.where("client_id", "=", clientId);
          }
@@ -165,31 +167,30 @@ export class PgEndPointMetricsRepo extends EndPointMetricsBaseRepo<EndpointMetri
    }
 
    /** Gets top endpoints by total hits. */
-   async getTopEndpointsByTotalHits(limit: number, startTime?: Date, clientId?: string): Promise<EndpointMetrics[]> {
-      // 24 hours ko data nikalne by default
+   async getTopEndpointsByTotalHits(limit: number, startTime?: Date, endTime?: Date, clientId?: string): Promise<EndpointMetrics[]> {
       if (!startTime) {
          startTime = new Date(Date.now() - 24 * 60 * 60 * 1000);
       }
-      return this.getTopEndpointsByMetric("total_hits", limit, startTime, clientId);
+      return this.getTopEndpointsByMetric("total_hits", limit, startTime, endTime, clientId);
    }
 
    /** Gets top endpoints by error hits. */
-   async getTopEndpointsByErrorHits(limit: number, startTime?: Date, clientId?: string): Promise<EndpointMetrics[]> {
+   async getTopEndpointsByErrorHits(limit: number, startTime?: Date, endTime?: Date, clientId?: string): Promise<EndpointMetrics[]> {
       if (!startTime) {
          startTime = new Date(Date.now() - 24 * 60 * 60 * 1000);
       }
-      return this.getTopEndpointsByMetric("error_hits", limit, startTime, clientId);
+      return this.getTopEndpointsByMetric("error_hits", limit, startTime, endTime, clientId);
    }
 
    /** Gets top endpoints by total latency. */
-   async getTopEndpointsByTotalLatency(limit: number, startTime?: Date, clientId?: string): Promise<EndpointMetrics[]> {
+   async getTopEndpointsByTotalLatency(limit: number, startTime?: Date, endTime?: Date, clientId?: string): Promise<EndpointMetrics[]> {
       if (!startTime) {
          startTime = new Date(Date.now() - 24 * 60 * 60 * 1000);
       }
-      return this.getTopEndpointsByMetric("total_latency", limit, startTime, clientId);
+      return this.getTopEndpointsByMetric("total_latency", limit, startTime, endTime, clientId);
    }
 
-   async getTopEndpointsByAverageLatency(limit: number, startTime?: Date, clientId?: string): Promise<EndpointMetrics[]> {
+   async getTopEndpointsByAverageLatency(limit: number, startTime?: Date, endTime?: Date, clientId?: string): Promise<EndpointMetrics[]> {
       try {
          const safeLimit = Math.min(Math.max(limit, 1), 100);
          let query = PostgresDB.selectFrom("endpoint_metrics")
@@ -202,8 +203,10 @@ export class PgEndPointMetricsRepo extends EndPointMetricsBaseRepo<EndpointMetri
             startTime = new Date(Date.now() - 24 * 60 * 60 * 1000);
          }
 
-         if (startTime) {
-            query = query.where("time_bucket", ">=", startTime);
+         query = query.where("time_bucket", ">=", startTime);
+
+         if (endTime) {
+            query = query.where("time_bucket", "<=", endTime);
          }
 
          if (clientId) {
@@ -213,6 +216,84 @@ export class PgEndPointMetricsRepo extends EndPointMetricsBaseRepo<EndpointMetri
          return await query.execute();
       } catch (error) {
          logger.error("Error getting top endpoints by average latency", { error, limit, clientId });
+         throw error;
+      }
+   }
+
+   async getOverviewStats(clientId: string, startTime?: Date, endTime?: Date): Promise<OverviewStats> {
+      try {
+         if (!startTime) {
+            startTime = new Date(Date.now() - 24 * 60 * 60 * 1000);
+         }
+
+         let query = PostgresDB.selectFrom("endpoint_metrics")
+            .select([
+               sql<number>`COALESCE(SUM(total_hits), 0)`.as("total_hits"),
+               sql<number>`COALESCE(SUM(error_hits), 0)`.as("total_errors"),
+               sql<number>`COALESCE(SUM(total_latency)::float / NULLIF(SUM(total_hits), 0), 0)`.as("avg_latency"),
+               sql<number>`COUNT(DISTINCT CONCAT(service_name, '|', endpoint, '|', method))`.as("unique_endpoints"),
+            ])
+            .where("client_id", "=", clientId)
+            .where("time_bucket", ">=", startTime);
+
+         if (endTime) {
+            query = query.where("time_bucket", "<=", endTime);
+         }
+
+         const row = await query.executeTakeFirstOrThrow();
+
+         const totalHits = Number(row.total_hits);
+         const totalErrors = Number(row.total_errors);
+
+         return {
+            total_hits: totalHits,
+            total_errors: totalErrors,
+            error_rate: totalHits > 0 ? parseFloat(((totalErrors / totalHits) * 100).toFixed(2)) : 0,
+            avg_latency: parseFloat(Number(row.avg_latency).toFixed(2)),
+            unique_endpoints: Number(row.unique_endpoints),
+         };
+      } catch (error) {
+         logger.error("Error getting overview stats", { error, clientId });
+         throw error;
+      }
+   }
+
+   async getTimeSeries(clientId: string, startTime?: Date, endTime?: Date, serviceName?: string): Promise<TimeSeriesBucket[]> {
+      try {
+         if (!startTime) {
+            startTime = new Date(Date.now() - 24 * 60 * 60 * 1000);
+         }
+
+         let query = PostgresDB.selectFrom("endpoint_metrics")
+            .select([
+               "time_bucket",
+               sql<number>`SUM(total_hits)`.as("total_hits"),
+               sql<number>`SUM(error_hits)`.as("error_hits"),
+               sql<number>`COALESCE(SUM(total_latency)::float / NULLIF(SUM(total_hits), 0), 0)`.as("avg_latency"),
+            ])
+            .where("client_id", "=", clientId)
+            .where("time_bucket", ">=", startTime)
+            .groupBy("time_bucket")
+            .orderBy("time_bucket", "asc");
+
+         if (endTime) {
+            query = query.where("time_bucket", "<=", endTime);
+         }
+
+         if (serviceName) {
+            query = query.where("service_name", "=", serviceName);
+         }
+
+         const rows = await query.execute();
+
+         return rows.map((row) => ({
+            time_bucket: row.time_bucket,
+            total_hits: Number(row.total_hits),
+            error_hits: Number(row.error_hits),
+            avg_latency: parseFloat(Number(row.avg_latency).toFixed(2)),
+         }));
+      } catch (error) {
+         logger.error("Error getting time series", { error, clientId });
          throw error;
       }
    }

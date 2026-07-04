@@ -7,6 +7,7 @@ import { EventDataType } from "../../../shared/typings/messaging.typings";
 import { EventDataDto } from "../dto/eventData.dto";
 import { ApiHitsBaseRepo } from "../repos/apiHitsBase.repo";
 import { EndPointMetricsBaseRepo } from "../repos/endpointMetricsBase.repo";
+import { ClientRetentionCache } from "../../../shared/infra/cache/clientRetentionCache";
 
 export enum TimeBucketInterval {
    Hourly = "hourly",
@@ -126,7 +127,8 @@ export class ProcessorService {
          );
 
          // Save to mongoDB. If failed then skip processing and saving to postgres.
-         await this.apiHitRepo.createApiHit(validatedData.data);
+         const retentionDays = await ClientRetentionCache.getRetentionDays(validatedData.data.clientId);
+         await this.apiHitRepo.createApiHit(validatedData.data, retentionDays);
          rawEventSaved = true;
 
          logger.info(`[ProcessorService] Raw Event : ${eventData.eventId} saved.`);

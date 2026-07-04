@@ -1,4 +1,4 @@
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { globalConfig } from "../../config/global.config";
 
 export const rateLimiter = rateLimit({
@@ -19,7 +19,11 @@ export const authRateLimiter = rateLimit({
    windowMs: globalConfig.rateLimit.auth.windowMs,
    max: globalConfig.rateLimit.auth.max,
    keyGenerator: (req) => {
-      return req.body.email || req.ip;
+      // A raw IPv6 address isn't a safe rate-limit key on its own — a single
+      // user's ISP typically hands them an entire /64 subnet, so falling back
+      // to req.ip directly would let them rotate addresses within it to bypass
+      // the limit. ipKeyGenerator() normalizes to the /64 prefix instead.
+      return req.body.email || ipKeyGenerator(req.ip || req.socket.remoteAddress || "unknown");
    },
    message: {
       success: false,

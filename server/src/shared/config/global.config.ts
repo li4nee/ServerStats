@@ -187,10 +187,7 @@ export const globalConfig = {
    },
 
    consumer: {
-      mongoPostgresConnectionMaxRetryAttemptsInConsumer: parseInt(
-         env.MONGO_POSTGRES_MAX_RETRY_ATTEMPTS_IN_CONSUMER || "5",
-         10,
-      ),
+      mongoPostgresConnectionMaxRetryAttemptsInConsumer: parseInt(env.MONGO_POSTGRES_MAX_RETRY_ATTEMPTS_IN_CONSUMER || "5", 10),
       // How many message one consumer instance can process before acknoledging them.
       prefetchCount: parseInt(env.CONSUMER_PREFETCH_COUNT || "20", 10),
       // We don't mind if postgres upsert will fail sometimes since we have raw logs in MongoDb and then can calculate

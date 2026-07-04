@@ -2,11 +2,12 @@ import { globalConfig } from "../../../shared/config/global.config";
 import logger from "../../../shared/config/logger.config";
 import { ApiHitsWithId } from "../../../shared/infra/db/mongo/models/apiHits.model";
 import { EndpointMetrics } from "../../../shared/infra/db/postgres/postgresTypes";
-import { InvalidInputError, ResourceNotInitializedError } from "../../../shared/typings/error.typings";
+import { InvalidInputError, InternalServerError, ResourceNotInitializedError } from "../../../shared/typings/error.typings";
 import { EventDataType } from "../../../shared/typings/messaging.typings";
 import { EventDataDto } from "../dto/eventData.dto";
 import { ApiHitsBaseRepo } from "../repos/apiHitsBase.repo";
 import { EndPointMetricsBaseRepo } from "../repos/endpointMetricsBase.repo";
+import { ClientRetentionCache } from "../../../shared/infra/cache/clientRetentionCache";
 
 export enum TimeBucketInterval {
    Hourly = "hourly",
@@ -103,7 +104,9 @@ export class ProcessorService {
          logger.error(
             `[ProcessorService] Failed to upsert metrics after ${this.postgresUpsertRetryAttempts} attempts for event ${eventData.eventId}. Error: ${lastError instanceof Error ? lastError.stack : lastError}`,
          );
-         throw lastError;
+         throw new InternalServerError(
+            `Failed to upsert metrics after ${this.postgresUpsertRetryAttempts} attempts for event ${eventData.eventId}`,
+         );
       }
    }
 
@@ -124,7 +127,8 @@ export class ProcessorService {
          );
 
          // Save to mongoDB. If failed then skip processing and saving to postgres.
-         await this.apiHitRepo.createApiHit(validatedData.data);
+         const retentionDays = await ClientRetentionCache.getRetentionDays(validatedData.data.clientId);
+         await this.apiHitRepo.createApiHit(validatedData.data, retentionDays);
          rawEventSaved = true;
 
          logger.info(`[ProcessorService] Raw Event : ${eventData.eventId} saved.`);

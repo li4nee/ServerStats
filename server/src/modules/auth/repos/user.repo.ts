@@ -59,10 +59,46 @@ export class MongoUserRepo extends UserBaseRepo<UserWithId> {
    }
 
    async findIfAnyExists(isSuperAdmin: boolean, email: string): Promise<boolean> {
-      let doc = null;
-      if (isSuperAdmin) doc = await this.model.findOne({}, { _id: 1 });
-      if (email) doc = await this.model.findOne({ email }, { _id: 1 });
-      return !!doc;
+      if (isSuperAdmin) {
+         const anyUserExists = await this.model.findOne({}, { _id: 1 });
+         return !!anyUserExists;
+      }
+      if (email) {
+         const emailExists = await this.model.findOne({ email }, { _id: 1 });
+         return !!emailExists;
+      }
+      return false;
+   }
+
+   async findByClientId(
+      clientId: string,
+      limit: number = 20,
+      cursor?: string,
+   ): Promise<{ data: UserWithId[]; nextCursor?: string }> {
+      const filter: Record<string, any> = { clientId, trash: false };
+
+      if (cursor) {
+         filter._id = { $lt: cursor };
+      }
+
+      const safeLimit = Math.min(Math.max(limit, 1), 100);
+      const docs = await this.model
+         .find(filter)
+         .sort({ _id: -1 })
+         .limit(safeLimit + 1)
+         .select("-password -__v");
+
+      let nextCursor: string | undefined;
+      let data: UserWithId[];
+
+      if (docs.length > safeLimit) {
+         nextCursor = docs[safeLimit]._id.toString();
+         data = docs.slice(0, safeLimit).map((d) => d.toObject() as UserWithId);
+      } else {
+         data = docs.map((d) => d.toObject() as UserWithId);
+      }
+
+      return { data, nextCursor };
    }
 
    async findUserRole(id: string): Promise<USER_ROLE | null | undefined> {

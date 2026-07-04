@@ -1,6 +1,6 @@
 import { Types } from "mongoose";
 import logger from "../../../shared/config/logger.config";
-import { InvalidInputError, PermissionNotGranted, ResourceNotInitializedError } from "../../../shared/typings/error.typings";
+import { InvalidInputError, PermissionNotGranted, ResourceNotFoundError, ResourceNotInitializedError } from "../../../shared/typings/error.typings";
 import { ApiKeyBaseRepo } from "../repos/apiKeyBase.repo";
 import { AuthorizationUtils } from "../../../shared/utils/authorization.utils";
 import { CreateApiKeyDtoType } from "../dtos/createApiKey.dto";
@@ -11,6 +11,7 @@ import { ClientBaseRepo } from "../repos/clientBase.repo";
 import { ApiKeyWithId } from "../../../shared/infra/db/mongo/models/apiKeys.model";
 import { ClientWithId } from "../../../shared/infra/db/mongo/models/client.model";
 import { globalConfig } from "../../../shared/config/global.config";
+import { AuditLogger } from "../../../shared/utils/auditLogger.utils";
 
 export class ApiKeyService {
    protected apiKeyRepo: ApiKeyBaseRepo<ApiKeyWithId>;
@@ -61,7 +62,7 @@ export class ApiKeyService {
             throw new PermissionNotGranted("Permission denied to create API keys for this client.");
 
          const client = await this.clientRepo.findById(clientId, true);
-         if (!client) throw new InvalidInputError("Client not found");
+         if (!client) throw new ResourceNotFoundError("Client not found");
 
          const apiKey = this.generateApiKey();
 
@@ -87,6 +88,18 @@ export class ApiKeyService {
             `API key created successfully with id : ${newApiKey._id} for clientId: ${clientId} by user: ${createdBy.id}`,
          );
 
+         // Never include the plaintext/hashed secret in the audit trail — keyId
+         // (the public identifier) is enough to correlate this entry later.
+         AuditLogger.log({
+            action: "api_key.created",
+            actorId: createdBy.id,
+            actorRole: createdBy.role,
+            clientId,
+            targetType: "api_key",
+            targetId: apiKey.keyId,
+            metadata: { name: body.name, environment: body.environment },
+         });
+
          return { keyId: apiKey.keyId, apiKey: apiKey.keyValue };
       } catch (error) {
          logger.error("Error creating API key for client", { error, clientId, createdBy });
@@ -100,7 +113,7 @@ export class ApiKeyService {
             throw new PermissionNotGranted("Permission denied to view API keys for this client.");
 
          const client = await this.clientRepo.findById(clientId, true);
-         if (!client) throw new InvalidInputError("Client not found");
+         if (!client) throw new ResourceNotFoundError("Client not found");
 
          const apiKeys = await this.apiKeyRepo.findByClientId(clientId, true, false);
 
@@ -123,15 +136,46 @@ export class ApiKeyService {
             throw new PermissionNotGranted("Permission denied to view API keys for this client.");
 
          const client = await this.clientRepo.findById(clientId, true);
-         if (!client) throw new InvalidInputError("Client not found");
+         if (!client) throw new ResourceNotFoundError("Client not found");
 
          const apiKey = await this.apiKeyRepo.findByKeyId(apiKeyId, true, false);
-         if (!apiKey) throw new InvalidInputError("API key not found");
+         if (!apiKey) throw new ResourceNotFoundError("API key not found");
 
          const { keyValue, ...safeapikey } = apiKey;
          return safeapikey;
       } catch (error) {
          logger.error("Error retrieving API key for client", { error, clientId, apiKeyId, requestedBy });
+         throw error;
+      }
+   }
+
+   async revokeApiKey(clientId: string, apiKeyId: string, requestedBy: UserInsideAuthorizedRequest): Promise<void> {
+      try {
+         if (!AuthorizationUtils.canCreateApiKeys(requestedBy, clientId))
+            throw new PermissionNotGranted("Permission denied to revoke API keys for this client.");
+
+         const client = await this.clientRepo.findById(clientId, true);
+         if (!client) throw new ResourceNotFoundError("Client not found.");
+
+         const apiKey = await this.apiKeyRepo.findById(apiKeyId, true, false);
+         if (!apiKey) throw new ResourceNotFoundError("API key not found.");
+
+         if (apiKey.clientId.toString() !== clientId)
+            throw new PermissionNotGranted("This API key does not belong to this client.");
+
+         await this.apiKeyRepo.delete(apiKeyId);
+         logger.info(`API key revoked: ${apiKeyId} for clientId: ${clientId} by user: ${requestedBy.id}`);
+         AuditLogger.log({
+            action: "api_key.revoked",
+            actorId: requestedBy.id,
+            actorRole: requestedBy.role,
+            clientId,
+            targetType: "api_key",
+            targetId: apiKeyId,
+            metadata: { name: apiKey.name },
+         });
+      } catch (error) {
+         logger.error("Error revoking API key", { error, clientId, apiKeyId, requestedBy });
          throw error;
       }
    }
@@ -150,13 +194,13 @@ export class ApiKeyService {
          }
 
          if (!apiKeyDoc.clientId) {
-            throw new InvalidInputError("API key not linked to client");
+            throw new ResourceNotFoundError("API key not linked to any client");
          }
 
          const client = await this.clientRepo.findById(apiKeyDoc.clientId.toString(), false);
 
          if (!client) {
-            throw new InvalidInputError("Client not found");
+            throw new ResourceNotFoundError("Client not found");
          }
 
          const safeClient: { _id: Types.ObjectId; name: string; slug: string; isActive: boolean } = {

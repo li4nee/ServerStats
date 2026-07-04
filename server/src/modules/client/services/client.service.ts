@@ -1,15 +1,17 @@
 import { Types } from "mongoose";
 import logger from "../../../shared/config/logger.config";
-import { InvalidInputError, PermissionNotGranted, ResourceNotInitializedError } from "../../../shared/typings/error.typings";
+import { InvalidInputError, PermissionNotGranted, ResourceNotFoundError, ResourceNotInitializedError } from "../../../shared/typings/error.typings";
 import { UserBaseRepo } from "../../auth/repos/userBase.repo";
 import { CreateClientDTOType } from "../dtos/createClient.dto";
+import { UpdateClientDTOType } from "../dtos/updateClient.dto";
+import { UpdateUserPermissionsDTOType } from "../dtos/updateUser.dto";
 import { ClientBaseRepo } from "../repos/clientBase.repo";
 import { USER_ROLE, UserInsideAuthorizedRequest } from "../../../shared/typings/auth.typings";
 import { AuthorizationUtils } from "../../../shared/utils/authorization.utils";
-import { CreateClientUserDTO, CreateClientUserDTOType } from "../dtos/createClientUser.dto";
-import crypto from "crypto";
+import { CreateClientUserDTOType } from "../dtos/createClientUser.dto";
 import { Client } from "../../../shared/infra/db/mongo/models/client.model";
 import { User, UserWithId } from "../../../shared/infra/db/mongo/models/user.model";
+import { AuditLogger } from "../../../shared/utils/auditLogger.utils";
 export class ClientService {
    protected clientRepo: ClientBaseRepo<Client>;
    // protected apiKeyRepo: ApiKeyBaseRepo<ApiKeyWithId>;
@@ -55,6 +57,18 @@ export class ClientService {
       return rest;
    }
 
+   private requireSuperAdmin(user: UserInsideAuthorizedRequest): void {
+      if (user.role !== USER_ROLE.SUPER_ADMIN) {
+         throw new PermissionNotGranted("Only Super Admins can perform this action.");
+      }
+   }
+
+   private requireAdminForClient(user: UserInsideAuthorizedRequest, clientId: string): void {
+      if (user.role === USER_ROLE.SUPER_ADMIN) return;
+      if (user.role === USER_ROLE.CLIENT_ADMIN && user.clientId === clientId && user.permissions.canManageUsers) return;
+      throw new PermissionNotGranted("You do not have permission to manage users for this client.");
+   }
+
    async createClient(clientData: CreateClientDTOType, createdBy: string): Promise<Client> {
       try {
          const { name, email, description, website } = clientData;
@@ -74,6 +88,18 @@ export class ClientService {
             createdBy: new Types.ObjectId(createdBy),
          });
          logger.info(`Client created successfully with slug : ${newClient.slug} by user: ${createdBy}`);
+         // createClient is only ever reachable via a super_admin-only route (see clientAdmin.route.ts).
+         // `Client` (the repo's declared generic here) doesn't expose `_id` even
+         // though the underlying document has one — slug is a stable, unique,
+         // type-safe identifier to correlate this entry with instead.
+         AuditLogger.log({
+            action: "client.created",
+            actorId: createdBy,
+            actorRole: USER_ROLE.SUPER_ADMIN,
+            targetType: "client",
+            targetId: newClient.slug,
+            metadata: { name: newClient.name, slug: newClient.slug },
+         });
          return newClient;
       } catch (error) {
          logger.error("Error creating client", { error, clientData, createdBy });
@@ -127,9 +153,191 @@ export class ClientService {
          logger.info(
             `Client user created successfully with username : ${newUser.username} for clientId: ${clientId} by user: ${createdBy.id}`,
          );
+         AuditLogger.log({
+            action: "user.created",
+            actorId: createdBy.id,
+            actorRole: createdBy.role,
+            clientId,
+            targetType: "user",
+            targetId: newUser._id?.toString(),
+            metadata: { username: newUser.username, role: newUser.role },
+         });
          return this.formatUserResponseWithoutPassword(newUser);
       } catch (error) {
          logger.error("Error creating client user", { error, clientId, userData, createdBy });
+         throw error;
+      }
+   }
+
+   async getClient(clientId: string, requestedBy: UserInsideAuthorizedRequest): Promise<Client> {
+      try {
+         if (requestedBy.role !== USER_ROLE.SUPER_ADMIN) {
+            if (requestedBy.clientId !== clientId) {
+               throw new PermissionNotGranted("You are not authorized to view this client.");
+            }
+         }
+         const client = await this.clientRepo.findById(clientId, false);
+         if (!client) throw new ResourceNotFoundError("Client not found.");
+         logger.info(`Client retrieved: ${clientId} by user: ${requestedBy.id}`);
+         return client;
+      } catch (error) {
+         logger.error("Error retrieving client", { error, clientId });
+         throw error;
+      }
+   }
+
+   async listClients(
+      requestedBy: UserInsideAuthorizedRequest,
+      limit: number,
+      cursor?: string,
+   ): Promise<{ data: Client[]; nextCursor?: string }> {
+      try {
+         this.requireSuperAdmin(requestedBy);
+         const safeLimit = Math.min(Math.max(limit, 1), 100);
+         const result = await this.clientRepo.findAll({}, { limit: safeLimit, cursor });
+         logger.info(`Clients listed by user: ${requestedBy.id}`);
+         return result;
+      } catch (error) {
+         logger.error("Error listing clients", { error });
+         throw error;
+      }
+   }
+
+   async updateClient(
+      clientId: string,
+      data: UpdateClientDTOType,
+      requestedBy: UserInsideAuthorizedRequest,
+   ): Promise<Client> {
+      try {
+         this.requireSuperAdmin(requestedBy);
+         const updated = await this.clientRepo.update(clientId, data as any);
+         if (!updated) throw new ResourceNotFoundError("Client not found.");
+         logger.info(`Client updated: ${clientId} by user: ${requestedBy.id}`);
+         AuditLogger.log({
+            action: "client.updated",
+            actorId: requestedBy.id,
+            actorRole: requestedBy.role,
+            clientId,
+            targetType: "client",
+            targetId: clientId,
+            metadata: { fields: Object.keys(data) },
+         });
+         return updated;
+      } catch (error) {
+         logger.error("Error updating client", { error, clientId });
+         throw error;
+      }
+   }
+
+   async listUsersForClient(
+      clientId: string,
+      requestedBy: UserInsideAuthorizedRequest,
+      limit: number,
+      cursor?: string,
+   ): Promise<{ data: Omit<UserWithId, "password">[]; nextCursor?: string }> {
+      try {
+         this.requireAdminForClient(requestedBy, clientId);
+         const client = await this.clientRepo.findById(clientId, true);
+         if (!client) throw new ResourceNotFoundError("Client not found.");
+         const safeLimit = Math.min(Math.max(limit, 1), 100);
+         const result = await this.userRepo.findByClientId(clientId, safeLimit, cursor);
+         logger.info(`Users listed for clientId: ${clientId} by user: ${requestedBy.id}`);
+         return result as { data: Omit<UserWithId, "password">[]; nextCursor?: string };
+      } catch (error) {
+         logger.error("Error listing users for client", { error, clientId });
+         throw error;
+      }
+   }
+
+   async updateUserPermissions(
+      clientId: string,
+      userId: string,
+      permissions: UpdateUserPermissionsDTOType,
+      requestedBy: UserInsideAuthorizedRequest,
+   ): Promise<Omit<User, "password" | "trash" | "isActive">> {
+      try {
+         this.requireAdminForClient(requestedBy, clientId);
+         const user = await this.userRepo.findById(userId);
+         if (!user) throw new ResourceNotFoundError("User not found.");
+         if (user.clientId?.toString() !== clientId)
+            throw new PermissionNotGranted("User does not belong to this client.");
+
+         const base = user.permissions ?? { canCreateApiKeys: false, canManageUsers: false, canViewRawLogs: false, canViewAnalytics: false, canManageSettings: false, canExportData: false };
+         const merged = {
+            canCreateApiKeys: permissions.canCreateApiKeys ?? base.canCreateApiKeys,
+            canManageUsers: permissions.canManageUsers ?? base.canManageUsers,
+            canViewRawLogs: permissions.canViewRawLogs ?? base.canViewRawLogs,
+            canViewAnalytics: permissions.canViewAnalytics ?? base.canViewAnalytics,
+            canManageSettings: permissions.canManageSettings ?? base.canManageSettings,
+            canExportData: permissions.canExportData ?? base.canExportData,
+         };
+         const updated = await this.userRepo.update(userId, { permissions: merged });
+         if (!updated) throw new ResourceNotFoundError("User not found.");
+         logger.info(`User permissions updated: ${userId} for clientId: ${clientId} by user: ${requestedBy.id}`);
+         AuditLogger.log({
+            action: "user.permissions_updated",
+            actorId: requestedBy.id,
+            actorRole: requestedBy.role,
+            clientId,
+            targetType: "user",
+            targetId: userId,
+            metadata: { permissions: merged },
+         });
+         return this.formatUserResponseWithoutPassword(updated);
+      } catch (error) {
+         logger.error("Error updating user permissions", { error, clientId, userId });
+         throw error;
+      }
+   }
+
+   async setUserActive(
+      clientId: string,
+      userId: string,
+      isActive: boolean,
+      requestedBy: UserInsideAuthorizedRequest,
+   ): Promise<Omit<User, "password" | "trash" | "isActive">> {
+      try {
+         this.requireAdminForClient(requestedBy, clientId);
+         const user = await this.userRepo.findById(userId);
+         if (!user) throw new ResourceNotFoundError("User not found.");
+         if (user.clientId?.toString() !== clientId)
+            throw new PermissionNotGranted("User does not belong to this client.");
+
+         const updated = await this.userRepo.update(userId, { isActive });
+         if (!updated) throw new ResourceNotFoundError("User not found.");
+         logger.info(`User ${isActive ? "activated" : "deactivated"}: ${userId} for clientId: ${clientId} by user: ${requestedBy.id}`);
+         AuditLogger.log({
+            action: isActive ? "user.activated" : "user.deactivated",
+            actorId: requestedBy.id,
+            actorRole: requestedBy.role,
+            clientId,
+            targetType: "user",
+            targetId: userId,
+         });
+         return this.formatUserResponseWithoutPassword(updated);
+      } catch (error) {
+         logger.error("Error setting user active status", { error, clientId, userId, isActive });
+         throw error;
+      }
+   }
+
+   async setClientActive(clientId: string, isActive: boolean, requestedBy: UserInsideAuthorizedRequest): Promise<Client> {
+      try {
+         this.requireSuperAdmin(requestedBy);
+         const updated = await this.clientRepo.update(clientId, { isActive } as any);
+         if (!updated) throw new ResourceNotFoundError("Client not found.");
+         logger.info(`Client ${isActive ? "activated" : "deactivated"}: ${clientId} by user: ${requestedBy.id}`);
+         AuditLogger.log({
+            action: isActive ? "client.activated" : "client.deactivated",
+            actorId: requestedBy.id,
+            actorRole: requestedBy.role,
+            clientId,
+            targetType: "client",
+            targetId: clientId,
+         });
+         return updated;
+      } catch (error) {
+         logger.error("Error setting client active status", { error, clientId, isActive });
          throw error;
       }
    }

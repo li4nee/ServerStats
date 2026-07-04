@@ -4,7 +4,6 @@ import { ApiHitDataDtoType } from "../dtos/hitData.dto";
 import { v4 as uuidv4 } from "uuid";
 import { IngestApiHitResponseDto } from "../dtos/ingestApiHitResponse.dto";
 import logger from "../../../shared/config/logger.config";
-import { time, timeStamp } from "node:console";
 export class IngestService {
    private eventProducer: IEventProducer;
    constructor(eventProducer: IEventProducer) {
@@ -28,7 +27,7 @@ export class IngestService {
             userAgent: data.userAgent || "unknown",
          };
 
-         let publishOptions = {
+         const publishOptions = {
             persistent: true,
             contentType: "application/json",
             messageId: eventData.eventId,
@@ -36,7 +35,7 @@ export class IngestService {
             timestamp: Math.floor(Date.now() / 1000), // RabbitMQ expects timestamp in seconds
          };
 
-         let publishData = {
+         const publishData = {
             eventData,
             messageId: publishOptions.messageId,
             correlationId: publishOptions.correlationId,

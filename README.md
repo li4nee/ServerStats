@@ -13,10 +13,6 @@ then returns. A separate consumer process does the actual persistence, so ingest
 if MongoDB or Postgres is briefly slow. A third process polls for alert rules that have crossed
 their threshold and dispatches notifications.
 
-![Architecture diagram](docs/architecture.svg)
-
-<sub>Source: [docs/architecture.mmd](docs/architecture.mmd). Regenerate after editing with:
-`npx @mermaid-js/mermaid-cli -i docs/architecture.mmd -o docs/architecture.svg -b white --theme neutral`</sub>
 
 ### Request/event flow
 

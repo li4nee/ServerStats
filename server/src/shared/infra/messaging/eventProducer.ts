@@ -5,13 +5,7 @@ import { IRetryStrategy } from "../../contracts/infra/resilience/IRetryStrategy.
 import { CircuitBreakerStatsType } from "../../typings/circuitBreaker.typings";
 import { ResourceNotInitializedError } from "../../typings/error.typings";
 import { ProducerShuttingDownError } from "../../typings/eventError.typings";
-import {
-   EventProducerMetricsType,
-   EventType,
-   PublishingEventDataType,
-   PublishingMessageType,
-   PublishOptions,
-} from "../../typings/messaging.typings";
+import { EventProducerMetricsType, PublishingEventDataType, PublishOptions } from "../../typings/messaging.typings";
 
 export class EventProducer {
    private channelManager: IConfirmChannelManager;
@@ -44,12 +38,6 @@ export class EventProducer {
    }
 
    private async publish(obj: PublishingEventDataType): Promise<boolean> {
-      const message: PublishingMessageType = {
-         type: EventType.API_HITS,
-         data: obj,
-         publishedAt: new Date().toISOString(),
-      };
-
       const publishOptions: PublishOptions = {
          persistent: true,
          contentType: "application/json",
@@ -63,7 +51,7 @@ export class EventProducer {
       }
       try {
          const currentChannel = await this.channelManager.getChannel();
-         const messageBuffer = Buffer.from(JSON.stringify(message));
+         const messageBuffer = Buffer.from(JSON.stringify(obj));
 
          return new Promise((resolve, reject) => {
             const written = currentChannel.publish("", this.queueName, messageBuffer, publishOptions, (err) => {

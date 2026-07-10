@@ -35,12 +35,6 @@ export interface EventDataType {
    userAgent?: string;
 }
 
-export interface PublishingMessageType {
-   type: EventType;
-   data: PublishingEventDataType;
-   publishedAt: string;
-}
-
 export interface PublishOptions {
    persistent: boolean; // Whether the message should be marked as persistent
    contentType: string; // Content type of the message

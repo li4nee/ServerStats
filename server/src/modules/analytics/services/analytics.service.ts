@@ -36,18 +36,26 @@ export class AnalyticsService implements IAnalyticsService {
 
    private mapToEndpointSummary(rows: EndpointMetrics[]): EndpointSummary[] {
       return rows.map((row) => {
-         const avgLatency = row.total_hits > 0 ? parseFloat((row.total_latency / row.total_hits).toFixed(2)) : 0;
-         const errorRate = row.total_hits > 0 ? parseFloat(((row.error_hits / row.total_hits) * 100).toFixed(2)) : 0;
+         // Postgres SUM()/MIN()/MAX() on integer columns come back as strings
+         // over the wire (bigint safety) — coerce before doing arithmetic or
+         // handing them to the frontend as JSON numbers.
+         const totalHits = Number(row.total_hits);
+         const errorHits = Number(row.error_hits);
+         const totalLatency = Number(row.total_latency);
+         const minLatency = Number(row.min_latency);
+         const maxLatency = Number(row.max_latency);
+         const avgLatency = totalHits > 0 ? parseFloat((totalLatency / totalHits).toFixed(2)) : 0;
+         const errorRate = totalHits > 0 ? parseFloat(((errorHits / totalHits) * 100).toFixed(2)) : 0;
          return {
             service_name: row.service_name,
             endpoint: row.endpoint,
             method: row.method,
-            total_hits: row.total_hits,
-            error_hits: row.error_hits,
+            total_hits: totalHits,
+            error_hits: errorHits,
             error_rate: errorRate,
             avg_latency: avgLatency,
-            min_latency: row.min_latency,
-            max_latency: row.max_latency,
+            min_latency: minLatency,
+            max_latency: maxLatency,
          };
       });
    }

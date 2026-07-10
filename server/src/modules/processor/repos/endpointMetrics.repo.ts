@@ -140,7 +140,21 @@ export class PgEndPointMetricsRepo extends EndPointMetricsBaseRepo<EndpointMetri
       try {
          const safeLimit = Math.min(Math.max(limit, 1), 100);
          let query = PostgresDB.selectFrom("endpoint_metrics")
-            .selectAll()
+            .select([
+               "service_name",
+               "endpoint",
+               "method",
+               sql<number>`0`.as("id"),
+               sql<string>`MAX(client_id)`.as("client_id"),
+               sql<Date>`MAX(time_bucket)`.as("time_bucket"),
+               sql<number>`SUM(total_hits)`.as("total_hits"),
+               sql<number>`SUM(error_hits)`.as("error_hits"),
+               sql<number>`MIN(min_latency)`.as("min_latency"),
+               sql<number>`MAX(max_latency)`.as("max_latency"),
+               sql<number>`SUM(total_latency)`.as("total_latency"),
+               sql<Date>`MAX(created_at)`.as("created_at"),
+               sql<Date>`MAX(updated_at)`.as("updated_at"),
+            ])
             .groupBy(["service_name", "endpoint", "method"])
             .orderBy(metric, "desc")
             .limit(safeLimit);
@@ -214,9 +228,23 @@ export class PgEndPointMetricsRepo extends EndPointMetricsBaseRepo<EndpointMetri
       try {
          const safeLimit = Math.min(Math.max(limit, 1), 100);
          let query = PostgresDB.selectFrom("endpoint_metrics")
-            .selectAll()
+            .select([
+               "service_name",
+               "endpoint",
+               "method",
+               sql<number>`0`.as("id"),
+               sql<string>`MAX(client_id)`.as("client_id"),
+               sql<Date>`MAX(time_bucket)`.as("time_bucket"),
+               sql<number>`SUM(total_hits)`.as("total_hits"),
+               sql<number>`SUM(error_hits)`.as("error_hits"),
+               sql<number>`MIN(min_latency)`.as("min_latency"),
+               sql<number>`MAX(max_latency)`.as("max_latency"),
+               sql<number>`SUM(total_latency)`.as("total_latency"),
+               sql<Date>`MAX(created_at)`.as("created_at"),
+               sql<Date>`MAX(updated_at)`.as("updated_at"),
+            ])
             .groupBy(["service_name", "endpoint", "method"])
-            .orderBy(sql`total_latency::float / NULLIF(total_hits, 0)`, "desc")
+            .orderBy(sql`SUM(total_latency)::float / NULLIF(SUM(total_hits), 0)`, "desc")
             .limit(safeLimit);
 
          if (!startTime) {

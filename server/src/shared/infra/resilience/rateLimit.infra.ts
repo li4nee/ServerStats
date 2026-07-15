@@ -5,7 +5,8 @@ import redisConnection from "../redisConnection";
 
 const makeRedisStore = (prefix: string) =>
    new RedisStore({
-      sendCommand: (command: string, ...args: string[]) => redisConnection.getClient().call(command, ...args) as Promise<RedisReply>,
+      sendCommand: (command: string, ...args: string[]) =>
+         redisConnection.getClient().call(command, ...args) as Promise<RedisReply>,
       prefix,
    });
 

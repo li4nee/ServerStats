@@ -12,7 +12,6 @@ function hashToken(rawToken: string): string {
    return crypto.createHmac("sha256", globalConfig.jwt.secret).update(rawToken).digest("hex");
 }
 
-
 export async function issueAndSendVerificationEmail(user: UserWithId): Promise<void> {
    try {
       const rawToken = crypto.randomBytes(32).toString("hex");

@@ -8,3 +8,4 @@ logs
 docs
 *.md
 npm-debug.log
+*.log

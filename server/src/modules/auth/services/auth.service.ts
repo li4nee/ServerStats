@@ -19,7 +19,11 @@ import { UserResponseDto } from "../dtos/userResponse.dto";
 import { issueAndSendVerificationEmail, hashVerificationOrResetToken } from "../../../shared/utils/emailVerification.utils";
 import { sendViaResend } from "../../../shared/utils/resendMailer.utils";
 import { buildPasswordResetEmailHtml } from "../../../shared/utils/authEmailTemplates.utils";
-import { AuthTokenCache, EMAIL_VERIFICATION_TOKEN_PREFIX, PASSWORD_RESET_TOKEN_PREFIX } from "../../../shared/infra/cache/authTokenCache";
+import {
+   AuthTokenCache,
+   EMAIL_VERIFICATION_TOKEN_PREFIX,
+   PASSWORD_RESET_TOKEN_PREFIX,
+} from "../../../shared/infra/cache/authTokenCache";
 
 const PASSWORD_RESET_TOKEN_TTL_SECONDS = 60 * 60; // 1 hour
 
@@ -264,7 +268,12 @@ export class AuthService {
          const rawToken = crypto.randomBytes(32).toString("hex");
          const tokenHash = hashVerificationOrResetToken(rawToken);
 
-         await AuthTokenCache.store(PASSWORD_RESET_TOKEN_PREFIX, tokenHash, user._id.toString(), PASSWORD_RESET_TOKEN_TTL_SECONDS);
+         await AuthTokenCache.store(
+            PASSWORD_RESET_TOKEN_PREFIX,
+            tokenHash,
+            user._id.toString(),
+            PASSWORD_RESET_TOKEN_TTL_SECONDS,
+         );
 
          if (!globalConfig.email.resendApiKey) {
             logger.warn("[AuthService] RESEND_API_KEY is not configured. Skipping password reset email.");

@@ -1,4 +1,5 @@
 import logger from "../../config/logger.config";
+import { globalConfig } from "../../config/global.config";
 import { ICircuitBreaker } from "../../contracts/infra/resilience/ICircuitBreaker.contract";
 import { IConfirmChannelManager } from "../../contracts/infra/messaging/IConfirmManager.contract";
 import { IRetryStrategy } from "../../contracts/infra/resilience/IRetryStrategy.contract";
@@ -53,6 +54,16 @@ export class EventProducer {
          const currentChannel = await this.channelManager.getChannel();
          const messageBuffer = Buffer.from(JSON.stringify(obj));
 
+         if (!globalConfig.amqp.publisherConfirm) {
+            // Fire-and-forget: skip broker per-message ack, only handle local backpressure.
+            const written = currentChannel.publish("", this.queueName, messageBuffer, publishOptions);
+            if (written) return true;
+
+            return new Promise((resolve) => {
+               currentChannel.once("drain", () => resolve(true));
+            });
+         }
+
          return new Promise((resolve, reject) => {
             const written = currentChannel.publish("", this.queueName, messageBuffer, publishOptions, (err) => {
                if (err) {
@@ -69,21 +80,22 @@ export class EventProducer {
             });
 
             // Backpressure handling: if the write buffer is full, wait for the 'drain' event before resolving
+
+            const onDrain = () => {
+               logger.debug("[EventProducer] 'drain' event received, resuming message publishing", {
+                  queue: this.queueName,
+                  messageId: publishOptions.messageId,
+                  correlationId: publishOptions.correlationId,
+               });
+            };
             if (!written) {
                logger.warn("[EventProducer] Backpressure detected, waiting for 'drain' event", {
                   queue: this.queueName,
                   messageId: publishOptions.messageId,
                   correlationId: publishOptions.correlationId,
                });
+               currentChannel.once("drain", onDrain);
             }
-            const onDrain = () => {
-               logger.info("[EventProducer] 'drain' event received, resuming message publishing", {
-                  queue: this.queueName,
-                  messageId: publishOptions.messageId,
-                  correlationId: publishOptions.correlationId,
-               });
-            };
-            currentChannel.once("drain", onDrain);
          });
       } catch (error) {
          logger.error(`[EventProducer] Error in publish method for queue ${this.queueName}`, {
@@ -153,7 +165,7 @@ export class EventProducer {
             this.circuitBreaker.onSuccess();
             this.incrementMetrics({ published: 1, retriesUsed: attempt });
 
-            logger.info("[EventProducer] Message published successfully", {
+            logger.debug("[EventProducer] Message published successfully", {
                queue: this.queueName,
                messageId: eventData.messageId,
                correlationId,

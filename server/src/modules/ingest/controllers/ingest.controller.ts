@@ -25,7 +25,7 @@ export class IngestController {
             throw new UnauthorizedError("Missing clientId or apiKeyId in request");
          }
 
-         logger.info("[IngestController] Received API hit data", {
+         logger.debug("[IngestController] Received API hit data", {
             body: req.body,
             clientId,
             apiKeyId,

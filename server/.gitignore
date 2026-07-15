@@ -4,3 +4,6 @@ logs
 dist
 !/docs
 !/docs/**
+*.log
+*.csv
+*.err

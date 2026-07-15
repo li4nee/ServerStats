@@ -1,6 +1,13 @@
 import { escapeHtml } from "./html.utils";
 
-function wrapper(badgeColor: string, badgeText: string, heading: string, bodyHtml: string, buttonLabel: string, buttonUrl: string): string {
+function wrapper(
+   badgeColor: string,
+   badgeText: string,
+   heading: string,
+   bodyHtml: string,
+   buttonLabel: string,
+   buttonUrl: string,
+): string {
    return `
 <!DOCTYPE html>
 <html>

@@ -74,8 +74,11 @@ router.post("/forgot-password", authRateLimiter, validateBody(EmailOnlyDTO), (re
    authController.forgotPassword(req, res, next),
 );
 
-router.post("/reset-password", authRateLimiter, validateBody(ResetPasswordDTO), (req: Request, res: Response, next: NextFunction) =>
-   authController.resetPassword(req, res, next),
+router.post(
+   "/reset-password",
+   authRateLimiter,
+   validateBody(ResetPasswordDTO),
+   (req: Request, res: Response, next: NextFunction) => authController.resetPassword(req, res, next),
 );
 
 export default router;

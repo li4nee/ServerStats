@@ -137,7 +137,10 @@ export class AnalyticsService implements IAnalyticsService {
    }
 
    /** Picks time-series source/resolution by range. */
-   private pickGranularity(startTime: Date, endTime: Date): { bucketMs: number; source: "mongo-fine" | "postgres-hourly" | "postgres-daily" } {
+   private pickGranularity(
+      startTime: Date,
+      endTime: Date,
+   ): { bucketMs: number; source: "mongo-fine" | "postgres-hourly" | "postgres-daily" } {
       const HOUR_MS = 60 * 60 * 1000;
       const DAY_MS = 24 * HOUR_MS;
       const spanMs = Math.max(0, endTime.getTime() - startTime.getTime());

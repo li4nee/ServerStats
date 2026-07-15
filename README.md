@@ -167,3 +167,11 @@ to be real values, with no dev fallback. See `.env` for the full list; the main 
 the first three are down — Redis failing is non-fatal, since rate limiting is designed to fail
 open. In production the response omits per-connection detail; non-production environments get the
 full breakdown.
+
+## Load testing
+
+Ingestion path load-tested with [k6](https://k6.io) (`server/scripts/k6/`). Validated **3,200
+req/s sustained for 2 minutes**: p95 290ms, p99 470ms, 0% errors, 0 rate-limited, 376,868 requests
+total. Reached after tuning consumer prefetch (20→50), Postgres pool size (10→50), and switching
+the RabbitMQ producer to fire-and-forget publishing instead of waiting on a per-message broker
+confirm.

@@ -346,7 +346,12 @@ export class PgEndPointMetricsRepo extends EndPointMetricsBaseRepo<EndpointMetri
       }
    }
 
-   async getDailyTimeSeries(clientId: string, startTime?: Date, endTime?: Date, serviceName?: string): Promise<TimeSeriesBucket[]> {
+   async getDailyTimeSeries(
+      clientId: string,
+      startTime?: Date,
+      endTime?: Date,
+      serviceName?: string,
+   ): Promise<TimeSeriesBucket[]> {
       try {
          if (!startTime) {
             startTime = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);

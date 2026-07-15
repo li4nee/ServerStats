@@ -7,12 +7,9 @@ const DEFAULT_RETENTION_DAYS = 30;
 const KEY_PREFIX = "cache:client_retention:";
 
 /**
- * Maps clientId -> Client.settings.dataRetentionPeriod so the processor
- * doesn't hit Mongo for a client-settings lookup on every single ingested
- * event. Backed by Redis (shared across consumer instances) rather than a
- * local Map, so scaling out horizontally doesn't multiply the Mongo lookups
- * and a retention change is picked up by every instance on the same TTL
- * instead of drifting per-process.
+ * Caches each client's retention days in Redis.
+ * This avoids hitting Mongo on every event and keeps all consumer instances
+ * in sync with the same TTL.
  */
 export class ClientRetentionCache {
    static async getRetentionDays(clientId: string): Promise<number> {

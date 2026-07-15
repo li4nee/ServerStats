@@ -26,5 +26,10 @@ export abstract class EndPointMetricsBaseRepo<T> {
    /** Same rollup table as getTimeSeries, but grouped by day instead of the
     * stored hourly bucket — used for long ranges where hundreds of hourly
     * points would just be noise rather than a readable trend. */
-   abstract getDailyTimeSeries(clientId: string, startTime?: Date, endTime?: Date, serviceName?: string): Promise<TimeSeriesBucket[]>;
+   abstract getDailyTimeSeries(
+      clientId: string,
+      startTime?: Date,
+      endTime?: Date,
+      serviceName?: string,
+   ): Promise<TimeSeriesBucket[]>;
 }

@@ -7,6 +7,16 @@ export default tseslint.config(
    js.configs.recommended,
    ...tseslint.configs.recommended,
    {
+      files: ["scripts/k6/**/*.js"],
+      languageOptions: {
+         globals: {
+            __ENV: "readonly",
+            __VU: "readonly",
+            __ITER: "readonly",
+         },
+      },
+   },
+   {
       rules: {
          // This codebase uses `any` deliberately in a few DI/repo-generic spots —
          // keep the check as a warning (visible, not a CI-blocking error).

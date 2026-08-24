@@ -49,6 +49,18 @@ export class AuthController {
       }
    }
 
+   async loginWithGoogle(req: Request, res: Response, next: NextFunction) {
+      try {
+         const { idToken } = req.body;
+         const result = await this.authService.loginWithGoogle(idToken);
+         const token = result.token;
+         CookieUtils.setCookie(res, "authToken", token);
+         return res.status(200).json(ResponseFormatter.success("User logged in successfully", 200, { user: result.user }));
+      } catch (error) {
+         next(error);
+      }
+   }
+
    async profile(req: AuthorizedRequest, res: Response, next: NextFunction) {
       try {
          if (!req.user || !req.user.id) {

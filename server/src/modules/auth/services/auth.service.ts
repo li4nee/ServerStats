@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { OAuth2Client } from "google-auth-library";
 import { globalConfig } from "../../../shared/config/global.config";
 import { User, UserDocument, UserWithId } from "../../../shared/infra/db/mongo/models/user.model";
 import {
@@ -43,6 +44,7 @@ export class AuthService {
    private jwtUtils: typeof JwtUtils;
    private jwtConfig: JwtConfig;
    private passwordUtils: IPasswordUtils;
+   private googleClient: OAuth2Client;
 
    constructor(
       userRepo: UserBaseRepo<UserWithId>,
@@ -57,6 +59,7 @@ export class AuthService {
       this.jwtUtils = jwtUtils;
       this.jwtConfig = jwtConfig;
       this.passwordUtils = passwordUtils;
+      this.googleClient = new OAuth2Client(globalConfig.google.clientId);
    }
 
    private generateToken(user: UserWithId): string {
@@ -194,6 +197,61 @@ export class AuthService {
          };
       } catch (error) {
          logger.error("Login failed", { error });
+         throw error;
+      }
+   }
+
+   async loginWithGoogle(idToken: string): Promise<{ user: UserResponseDto; token: string }> {
+      try {
+         if (!globalConfig.google.clientId) {
+            throw new ResourceNotInitializedError("Google login is not configured on this server.");
+         }
+
+         let email: string | undefined;
+         try {
+            const ticket = await this.googleClient.verifyIdToken({
+               idToken,
+               audience: globalConfig.google.clientId,
+            });
+            const payload = ticket.getPayload();
+            email = payload?.email_verified ? payload.email : undefined;
+         } catch (error) {
+            logger.warn("Google ID token verification failed", { error });
+            throw new PermissionNotGranted("Invalid Google credential.");
+         }
+
+         if (!email) {
+            throw new PermissionNotGranted("Invalid Google credential.");
+         }
+
+         const user = await this.userRepo.findByEmail(email);
+
+         if (!user) {
+            logger.warn(`Google login attempt for unknown account: ${email}`);
+            throw new ResourceNotFoundError("No account found for this Google email. Please sign up first.");
+         }
+
+         if (!user.isActive) {
+            logger.warn(`Inactive user Google login attempt: ${email}`);
+            throw new PermissionNotGranted("User account is inactive. Please contact administrator.");
+         }
+
+         // Google login so auto verify
+         if (!user.isEmailVerified) {
+            await this.userRepo.update(user._id.toString(), { isEmailVerified: true });
+            user.isEmailVerified = true;
+         }
+
+         const token = this.generateToken(user as UserWithId);
+
+         logger.info(`User logged in via Google: ${user.email}`);
+
+         return {
+            user: new UserResponseDto(user as UserWithId),
+            token,
+         };
+      } catch (error) {
+         logger.error("Google login failed", { error });
          throw error;
       }
    }

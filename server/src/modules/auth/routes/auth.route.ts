@@ -16,6 +16,7 @@ import { EmailOnlyDTO } from "../dtos/emailOnly.dto";
 import { VerifyEmailDTO } from "../dtos/verifyEmail.dto";
 import { ResetPasswordDTO } from "../dtos/resetPassword.dto";
 import { SignupDTO } from "../../client/dtos/signup.dto";
+import { GoogleLoginDTO } from "../dtos/googleLogin.dto";
 
 const router = Router();
 const { authController } = AuthDependenciesContainer.init().controllers;
@@ -46,6 +47,10 @@ router.post(
 
 router.post("/login", authRateLimiter, validateBody(LoginDTO), (req: Request, res: Response, next: NextFunction) =>
    authController.login(req, res, next),
+);
+
+router.post("/google", authRateLimiter, validateBody(GoogleLoginDTO), (req: Request, res: Response, next: NextFunction) =>
+   authController.loginWithGoogle(req, res, next),
 );
 
 router.get("/profile", authenticate, (req: Request, res: Response, next: NextFunction) => authController.profile(req, res, next));

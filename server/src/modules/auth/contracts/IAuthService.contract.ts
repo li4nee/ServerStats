@@ -10,6 +10,8 @@ export interface IAuthService {
 
    login(loginData: { email: string; password: string }): Promise<{ user: UserResponseDto; token: string }>;
 
+   loginWithGoogle(idToken: string): Promise<{ user: UserResponseDto; token: string }>;
+
    getProfile(userId: string): Promise<Omit<User, "password" | "trash" | "isActive">>;
 
    isSuperAdmin(id: string): Promise<boolean>;

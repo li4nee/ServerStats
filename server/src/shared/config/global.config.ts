@@ -93,6 +93,8 @@ const envSchema = z.object({
    RESEND_DEFAULT_FROM: z.string().optional(),
 
    FRONTEND_URL: z.string().optional(),
+
+   GOOGLE_CLIENT_ID: z.string().optional(),
 });
 
 const envSchemaWithProdChecks = envSchema.superRefine((data, ctx) => {
@@ -249,4 +251,8 @@ export const globalConfig = {
    },
 
    frontendUrl: env.FRONTEND_URL || "http://localhost:3000",
+
+   google: {
+      clientId: env.GOOGLE_CLIENT_ID || "",
+   },
 };

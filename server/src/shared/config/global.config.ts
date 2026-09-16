@@ -82,6 +82,15 @@ const envSchema = z.object({
    ALERTING_WORKER_STARTUP_MAX_RETRY_DELAY_MS: numeric,
    ALERTING_WORKER_STARTUP_JITTER_FACTOR: numeric,
 
+   UPTIME_WORKER_POLL_INTERVAL_MS: numeric,
+   UPTIME_WORKER_DB_MAX_RETRY_ATTEMPTS: numeric,
+   UPTIME_WORKER_CONCURRENCY: numeric,
+   UPTIME_WORKER_DEFAULT_TIMEOUT_MS: numeric,
+   UPTIME_WORKER_STARTUP_MAX_RETRIES: numeric,
+   UPTIME_WORKER_STARTUP_BASE_RETRY_DELAY_MS: numeric,
+   UPTIME_WORKER_STARTUP_MAX_RETRY_DELAY_MS: numeric,
+   UPTIME_WORKER_STARTUP_JITTER_FACTOR: numeric,
+
    COOKIE_MAX_AGE: numeric,
 
    CORS_ALLOWED_ORIGINS: z.string().optional(),
@@ -220,6 +229,23 @@ export const globalConfig = {
          baseRetryDelayInMs: parseInt(env.ALERTING_WORKER_STARTUP_BASE_RETRY_DELAY_MS || "1000", 10),
          maxRetryDelayInMs: parseInt(env.ALERTING_WORKER_STARTUP_MAX_RETRY_DELAY_MS || "30000", 10),
          jitterFactor: parseFloat(env.ALERTING_WORKER_STARTUP_JITTER_FACTOR || "0.3"),
+      },
+   },
+
+   uptimeWorker: {
+      // How often the worker wakes up and scans for due monitors. Each monitor's own
+      // intervalMs (1-5 min) is honored on top of this via a due-check filter in the cycle.
+      pollIntervalMs: parseInt(env.UPTIME_WORKER_POLL_INTERVAL_MS || "60000", 10), // 1 minute
+      mongoPostgresConnectionMaxRetryAttempts: parseInt(env.UPTIME_WORKER_DB_MAX_RETRY_ATTEMPTS || "5", 10),
+      // Bounded concurrency for outbound pings within one cycle, so a slow/hanging
+      // target can't serialize the whole page of monitors.
+      concurrency: parseInt(env.UPTIME_WORKER_CONCURRENCY || "10", 10),
+      defaultTimeoutMs: parseInt(env.UPTIME_WORKER_DEFAULT_TIMEOUT_MS || "5000", 10),
+      startupRetryStrategyOptions: {
+         maxRetries: parseInt(env.UPTIME_WORKER_STARTUP_MAX_RETRIES || "5", 10),
+         baseRetryDelayInMs: parseInt(env.UPTIME_WORKER_STARTUP_BASE_RETRY_DELAY_MS || "1000", 10),
+         maxRetryDelayInMs: parseInt(env.UPTIME_WORKER_STARTUP_MAX_RETRY_DELAY_MS || "30000", 10),
+         jitterFactor: parseFloat(env.UPTIME_WORKER_STARTUP_JITTER_FACTOR || "0.3"),
       },
    },
 

@@ -1,9 +1,10 @@
 import { UserInsideAuthorizedRequest } from "../../../shared/typings/auth.typings";
 import { UptimeMonitorDocument } from "../../../shared/infra/db/mongo/models/uptimeMonitor.model";
+import { UptimeAlertLogDocument } from "../../../shared/infra/db/mongo/models/uptimeAlertLog.model";
 import { UptimeSummary, UptimeTimeSeriesBucket } from "../repos/uptimeCheckBase.repo";
 import { CreateMonitorDTOType } from "../dtos/createMonitor.dto";
 import { UpdateMonitorDTOType } from "../dtos/updateMonitor.dto";
-import { HistoryQueryDTOType, ListMonitorsQueryDTOType } from "../dtos/listMonitors.dto";
+import { AlertLogQueryDTOType, HistoryQueryDTOType, ListMonitorsQueryDTOType } from "../dtos/listMonitors.dto";
 
 export interface MonitorStatus {
    monitor: UptimeMonitorDocument;
@@ -37,4 +38,10 @@ export interface IUptimeService {
       monitorId: string,
       query: HistoryQueryDTOType,
    ): Promise<UptimeTimeSeriesBucket[]>;
+   getAlertHistory(
+      user: UserInsideAuthorizedRequest,
+      clientId: string,
+      monitorId: string,
+      query: AlertLogQueryDTOType,
+   ): Promise<{ data: UptimeAlertLogDocument[]; nextCursor?: string }>;
 }

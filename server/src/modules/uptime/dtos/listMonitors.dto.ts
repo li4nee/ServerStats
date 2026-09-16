@@ -28,6 +28,17 @@ export const HistoryQueryDTO = z.object({
 
 export type HistoryQueryDTOType = z.infer<typeof HistoryQueryDTO>;
 
+export const AlertLogQueryDTO = z.object({
+   limit: z
+      .string()
+      .optional()
+      .transform((val) => (val ? parseInt(val, 10) : 20))
+      .refine((val) => val >= 1 && val <= 100, { message: "limit must be between 1 and 100" }),
+   cursor: z.string().optional(),
+});
+
+export type AlertLogQueryDTOType = z.infer<typeof AlertLogQueryDTO>;
+
 export const MonitorIdParamSchema = z.object({
    id: z.string().min(1, "Monitor ID is required"),
 });

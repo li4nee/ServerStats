@@ -29,6 +29,16 @@ function makeDeps(overrides: Partial<Record<string, unknown>> = {}) {
       pinger: {
          ping: jest.fn().mockResolvedValue({ status: "up", statusCode: 200, latencyMs: 12, error: null }),
       },
+      alertDispatcher: {
+         dispatch: jest.fn().mockResolvedValue(["webhook"]),
+      },
+      alertService: {
+         getConsecutiveFailuresThreshold: jest.fn().mockReturnValue(2),
+         getResponseTimeThresholdMs: jest.fn().mockReturnValue(undefined),
+         shouldNotifyOnRecovery: jest.fn().mockReturnValue(false),
+         isInCooldown: jest.fn().mockReturnValue(false),
+         recordFire: jest.fn().mockResolvedValue(undefined),
+      },
       mongoDBConnection: { connect: jest.fn().mockResolvedValue(undefined), disconnect: jest.fn().mockResolvedValue(undefined) },
       postgresConnection: {
          testConnection: jest.fn().mockResolvedValue(undefined),
@@ -126,6 +136,141 @@ describe("UptimeWorker", () => {
       await worker.stop();
 
       expect(worker.getStats().totalErrors).toBe(1);
+   });
+
+   describe("alert firing", () => {
+      it("fires a 'down' alert exactly when consecutiveFailures first reaches the threshold", async () => {
+         const monitor = makeMonitor({ id: "m1", consecutiveFailures: 1 }); // one more failure -> hits default threshold of 2
+         const deps = makeDeps({
+            uptimeMonitorRepo: {
+               findEnabled: jest.fn().mockResolvedValue({ data: [monitor] }),
+               update: jest.fn().mockResolvedValue(null),
+            },
+            pinger: { ping: jest.fn().mockResolvedValue({ status: "down", statusCode: 500, latencyMs: 20, error: "boom" }) },
+         });
+         const worker = new UptimeWorker(deps);
+
+         await worker.start();
+         await worker.stop();
+
+         expect(deps.alertDispatcher.dispatch).toHaveBeenCalledWith(monitor, expect.objectContaining({ reason: "down" }));
+         expect(deps.alertService.recordFire).toHaveBeenCalledWith(monitor, "down", expect.any(String), expect.any(Object), [
+            "webhook",
+         ]);
+         expect(worker.getStats().totalAlertsFired).toBe(1);
+      });
+
+      it("does not fire before the failure threshold is reached", async () => {
+         const monitor = makeMonitor({ id: "m1", consecutiveFailures: 0 }); // first failure only reaches 1, threshold is 2
+         const deps = makeDeps({
+            uptimeMonitorRepo: {
+               findEnabled: jest.fn().mockResolvedValue({ data: [monitor] }),
+               update: jest.fn().mockResolvedValue(null),
+            },
+            pinger: { ping: jest.fn().mockResolvedValue({ status: "down", statusCode: 500, latencyMs: 20, error: "boom" }) },
+         });
+         const worker = new UptimeWorker(deps);
+
+         await worker.start();
+         await worker.stop();
+
+         expect(deps.alertDispatcher.dispatch).not.toHaveBeenCalled();
+         expect(worker.getStats().totalAlertsFired).toBe(0);
+      });
+
+      it("suppresses a 'down' alert while still in cooldown", async () => {
+         const monitor = makeMonitor({ id: "m1", consecutiveFailures: 1 });
+         const deps = makeDeps({
+            uptimeMonitorRepo: {
+               findEnabled: jest.fn().mockResolvedValue({ data: [monitor] }),
+               update: jest.fn().mockResolvedValue(null),
+            },
+            pinger: { ping: jest.fn().mockResolvedValue({ status: "down", statusCode: 500, latencyMs: 20, error: "boom" }) },
+            alertService: {
+               getConsecutiveFailuresThreshold: jest.fn().mockReturnValue(2),
+               getResponseTimeThresholdMs: jest.fn().mockReturnValue(undefined),
+               shouldNotifyOnRecovery: jest.fn().mockReturnValue(false),
+               isInCooldown: jest.fn().mockReturnValue(true),
+               recordFire: jest.fn().mockResolvedValue(undefined),
+            },
+         });
+         const worker = new UptimeWorker(deps);
+
+         await worker.start();
+         await worker.stop();
+
+         expect(deps.alertDispatcher.dispatch).not.toHaveBeenCalled();
+      });
+
+      it("fires a 'recovery' alert only when notifyOnRecovery is enabled and the monitor was down", async () => {
+         const monitor = makeMonitor({ id: "m1", lastStatus: "down", consecutiveFailures: 3 });
+         const deps = makeDeps({
+            uptimeMonitorRepo: {
+               findEnabled: jest.fn().mockResolvedValue({ data: [monitor] }),
+               update: jest.fn().mockResolvedValue(null),
+            },
+            pinger: { ping: jest.fn().mockResolvedValue({ status: "up", statusCode: 200, latencyMs: 10, error: null }) },
+            alertService: {
+               getConsecutiveFailuresThreshold: jest.fn().mockReturnValue(2),
+               getResponseTimeThresholdMs: jest.fn().mockReturnValue(undefined),
+               shouldNotifyOnRecovery: jest.fn().mockReturnValue(true),
+               isInCooldown: jest.fn().mockReturnValue(false),
+               recordFire: jest.fn().mockResolvedValue(undefined),
+            },
+         });
+         const worker = new UptimeWorker(deps);
+
+         await worker.start();
+         await worker.stop();
+
+         expect(deps.alertDispatcher.dispatch).toHaveBeenCalledWith(monitor, expect.objectContaining({ reason: "recovery" }));
+      });
+
+      it("fires a 'slow_response' alert when latency exceeds the configured threshold", async () => {
+         const monitor = makeMonitor({ id: "m1", lastStatus: "up" });
+         const deps = makeDeps({
+            uptimeMonitorRepo: {
+               findEnabled: jest.fn().mockResolvedValue({ data: [monitor] }),
+               update: jest.fn().mockResolvedValue(null),
+            },
+            pinger: { ping: jest.fn().mockResolvedValue({ status: "up", statusCode: 200, latencyMs: 5000, error: null }) },
+            alertService: {
+               getConsecutiveFailuresThreshold: jest.fn().mockReturnValue(2),
+               getResponseTimeThresholdMs: jest.fn().mockReturnValue(1000),
+               shouldNotifyOnRecovery: jest.fn().mockReturnValue(false),
+               isInCooldown: jest.fn().mockReturnValue(false),
+               recordFire: jest.fn().mockResolvedValue(undefined),
+            },
+         });
+         const worker = new UptimeWorker(deps);
+
+         await worker.start();
+         await worker.stop();
+
+         expect(deps.alertDispatcher.dispatch).toHaveBeenCalledWith(monitor, expect.objectContaining({ reason: "slow_response" }));
+      });
+
+      it("an alert dispatch failure doesn't block the monitor's status write-back", async () => {
+         const monitor = makeMonitor({ id: "m1", consecutiveFailures: 1 });
+         const deps = makeDeps({
+            uptimeMonitorRepo: {
+               findEnabled: jest.fn().mockResolvedValue({ data: [monitor] }),
+               update: jest.fn().mockResolvedValue(null),
+            },
+            pinger: { ping: jest.fn().mockResolvedValue({ status: "down", statusCode: 500, latencyMs: 20, error: "boom" }) },
+            alertDispatcher: { dispatch: jest.fn().mockRejectedValue(new Error("dispatch failed")) },
+         });
+         const worker = new UptimeWorker(deps);
+
+         await worker.start();
+         await worker.stop();
+
+         expect(deps.uptimeMonitorRepo.update).toHaveBeenCalledWith(
+            "m1",
+            expect.objectContaining({ lastStatus: "down", consecutiveFailures: 2 }),
+         );
+         expect(worker.getStats().totalErrors).toBe(0);
+      });
    });
 
    it("stop() clears the poll timer and disconnects both DB connections", async () => {

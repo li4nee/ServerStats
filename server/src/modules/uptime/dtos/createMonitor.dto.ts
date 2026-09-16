@@ -26,3 +26,4 @@ export const CreateMonitorDTO = z.object({
 });
 
 export type CreateMonitorDTOType = z.infer<typeof CreateMonitorDTO>;
+export type AlertConditionsType = z.infer<typeof AlertConditionsSchema>;

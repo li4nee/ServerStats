@@ -10,7 +10,7 @@ import { UptimeAlertLogDocument } from "../../../shared/infra/db/mongo/models/up
 import { IUptimeService, MonitorStatus } from "../contracts/IUptimeService.contract";
 import { CreateMonitorDTOType } from "../dtos/createMonitor.dto";
 import { UpdateMonitorDTOType } from "../dtos/updateMonitor.dto";
-import { HistoryQueryDTOType, ListMonitorsQueryDTOType } from "../dtos/listMonitors.dto";
+import { AlertLogQueryDTOType, HistoryQueryDTOType, ListMonitorsQueryDTOType } from "../dtos/listMonitors.dto";
 import { AuditLogger } from "../../../shared/utils/auditLogger.utils";
 
 export class UptimeService implements IUptimeService {
@@ -211,6 +211,17 @@ export class UptimeService implements IUptimeService {
          return await this.uptimeCheckRepo.getTimeSeries(monitorId, query.startTime, query.endTime, query.bucket);
       } catch (error) {
          logger.error("[UptimeService] Error getting monitor history", { error, clientId, monitorId });
+         throw error;
+      }
+   }
+
+   async getAlertHistory(user: UserInsideAuthorizedRequest, clientId: string, monitorId: string, query: AlertLogQueryDTOType) {
+      try {
+         this.checkViewPermission(user, clientId);
+         await this.getOwnedMonitor(clientId, monitorId);
+         return await this.uptimeAlertLogRepo.findByMonitorId(monitorId, query.limit, query.cursor);
+      } catch (error) {
+         logger.error("[UptimeService] Error getting monitor alert history", { error, clientId, monitorId });
          throw error;
       }
    }

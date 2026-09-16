@@ -5,7 +5,7 @@ import { ResponseFormatter } from "../../../shared/utils/responseFormatter.utils
 import { IUptimeService } from "../contracts/IUptimeService.contract";
 import { CreateMonitorDTOType } from "../dtos/createMonitor.dto";
 import { UpdateMonitorDTOType } from "../dtos/updateMonitor.dto";
-import { HistoryQueryDTOType, ListMonitorsQueryDTOType } from "../dtos/listMonitors.dto";
+import { AlertLogQueryDTOType, HistoryQueryDTOType, ListMonitorsQueryDTOType } from "../dtos/listMonitors.dto";
 
 export class UptimeController {
    protected uptimeService: IUptimeService;
@@ -122,6 +122,20 @@ export class UptimeController {
          const query = req.query as unknown as HistoryQueryDTOType;
          const data = await this.uptimeService.getHistory(req.user!, clientId, id, query);
          return res.status(200).json(ResponseFormatter.success("Uptime monitor history retrieved successfully.", 200, { data }));
+      } catch (error) {
+         next(error);
+      }
+   }
+
+   /**
+    * GET /api/v1/uptime/:clientId/:id/alerts
+    */
+   async getAlerts(req: AuthorizedRequest, res: Response, next: NextFunction) {
+      try {
+         const { clientId, id } = req.params as { clientId: string; id: string };
+         const query = req.query as unknown as AlertLogQueryDTOType;
+         const result = await this.uptimeService.getAlertHistory(req.user!, clientId, id, query);
+         return res.status(200).json(ResponseFormatter.success("Uptime alert history retrieved successfully.", 200, result));
       } catch (error) {
          next(error);
       }

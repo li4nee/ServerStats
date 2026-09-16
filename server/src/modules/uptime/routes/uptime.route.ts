@@ -6,7 +6,7 @@ import { USER_ROLE } from "../../../shared/typings/auth.typings";
 import UptimeDependencyContainer from "../dependencies/uptime.dependency";
 import { CreateMonitorDTO } from "../dtos/createMonitor.dto";
 import { UpdateMonitorDTO } from "../dtos/updateMonitor.dto";
-import { HistoryQueryDTO, ListMonitorsQueryDTO, MonitorClientParamSchema } from "../dtos/listMonitors.dto";
+import { AlertLogQueryDTO, HistoryQueryDTO, ListMonitorsQueryDTO, MonitorClientParamSchema } from "../dtos/listMonitors.dto";
 
 const router = Router();
 const { uptimeController } = UptimeDependencyContainer.init().controllers;
@@ -62,6 +62,20 @@ router.get(
    validateParams(MonitorClientParamSchema),
    validateQuery(HistoryQueryDTO),
    (req: Request, res: Response, next: NextFunction) => uptimeController.getHistory(req, res, next),
+);
+
+/**
+ * @route GET /api/v1/uptime/:clientId/:id/alerts
+ * @desc Fired-alert log for a monitor (down/recovery/slow_response), paginated newest first
+ * @access Private (Super Admin, Client Admin, Client User with canViewAnalytics)
+ */
+router.get(
+   "/:clientId/:id/alerts",
+   authenticate,
+   authorize([USER_ROLE.SUPER_ADMIN, USER_ROLE.CLIENT_ADMIN, USER_ROLE.CLIENT_USER]),
+   validateParams(MonitorClientParamSchema),
+   validateQuery(AlertLogQueryDTO),
+   (req: Request, res: Response, next: NextFunction) => uptimeController.getAlerts(req, res, next),
 );
 
 /**

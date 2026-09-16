@@ -6,7 +6,10 @@ import { ResourceNotInitializedError } from "../../../shared/typings/error.typin
 import { UptimeMonitorBaseRepo } from "../repos/uptimeMonitorBase.repo";
 import { UptimeMonitorDocument } from "../../../shared/infra/db/mongo/models/uptimeMonitor.model";
 import { UptimeCheckBaseRepo } from "../repos/uptimeCheckBase.repo";
-import { UptimePingerService } from "../services/uptimePinger.service";
+import { PingResult, UptimePingerService } from "../services/uptimePinger.service";
+import { UptimeAlertDispatcherService } from "../services/uptimeAlertDispatcher.service";
+import { UptimeAlertService } from "../services/uptimeAlert.service";
+import { UptimeDispatchPayload } from "../services/channels/uptimeAlertChannel.interface";
 
 const POLL_INTERVAL_MS = globalConfig.uptimeWorker.pollIntervalMs;
 const DB_MAX_RETRY_ATTEMPTS = globalConfig.uptimeWorker.mongoPostgresConnectionMaxRetryAttempts;
@@ -18,6 +21,7 @@ interface UptimeWorkerStats {
    totalUp: number;
    totalDown: number;
    totalErrors: number;
+   totalAlertsFired: number;
    lastCycleAt: string | null;
    lastCycleDurationMs: number | null;
 }
@@ -46,6 +50,8 @@ export class UptimeWorker {
    private uptimeMonitorRepo: UptimeMonitorBaseRepo<UptimeMonitorDocument>;
    private uptimeCheckRepo: UptimeCheckBaseRepo;
    private pinger: UptimePingerService;
+   private alertDispatcher: UptimeAlertDispatcherService;
+   private alertService: UptimeAlertService;
    private mongoDBConnection: MongoConnection;
    private postgresConnection: PostgresConnection;
 
@@ -58,6 +64,7 @@ export class UptimeWorker {
       totalUp: 0,
       totalDown: 0,
       totalErrors: 0,
+      totalAlertsFired: 0,
       lastCycleAt: null,
       lastCycleDurationMs: null,
    };
@@ -66,21 +73,35 @@ export class UptimeWorker {
       uptimeMonitorRepo,
       uptimeCheckRepo,
       pinger,
+      alertDispatcher,
+      alertService,
       mongoDBConnection,
       postgresConnection,
    }: {
       uptimeMonitorRepo: UptimeMonitorBaseRepo<UptimeMonitorDocument>;
       uptimeCheckRepo: UptimeCheckBaseRepo;
       pinger: UptimePingerService;
+      alertDispatcher: UptimeAlertDispatcherService;
+      alertService: UptimeAlertService;
       mongoDBConnection: MongoConnection;
       postgresConnection: PostgresConnection;
    }) {
-      if (!uptimeMonitorRepo || !uptimeCheckRepo || !pinger || !mongoDBConnection || !postgresConnection) {
+      if (
+         !uptimeMonitorRepo ||
+         !uptimeCheckRepo ||
+         !pinger ||
+         !alertDispatcher ||
+         !alertService ||
+         !mongoDBConnection ||
+         !postgresConnection
+      ) {
          throw new ResourceNotInitializedError("[UptimeWorker] All dependencies must be provided.");
       }
       this.uptimeMonitorRepo = uptimeMonitorRepo;
       this.uptimeCheckRepo = uptimeCheckRepo;
       this.pinger = pinger;
+      this.alertDispatcher = alertDispatcher;
+      this.alertService = alertService;
       this.mongoDBConnection = mongoDBConnection;
       this.postgresConnection = postgresConnection;
    }
@@ -107,6 +128,50 @@ export class UptimeWorker {
       }
    }
 
+   /** Decides whether this check should fire an alert, and if so which one. Never throws. */
+   private async evaluateAndFireAlerts(
+      monitor: UptimeMonitorDocument,
+      result: PingResult,
+      newConsecutiveFailures: number,
+   ): Promise<void> {
+      const isUp = result.status === "up";
+      const wasDown = monitor.lastStatus === "down";
+      const stats: UptimeDispatchPayload["stats"] = {
+         statusCode: result.statusCode,
+         latencyMs: result.latencyMs,
+         consecutiveFailures: newConsecutiveFailures,
+         error: result.error,
+      };
+
+      let reason: UptimeDispatchPayload["reason"] | null = null;
+      let message = "";
+
+      if (!isUp && newConsecutiveFailures === this.alertService.getConsecutiveFailuresThreshold(monitor)) {
+         if (this.alertService.isInCooldown(monitor)) return;
+         reason = "down";
+         message = `Monitor "${monitor.name}" is down: ${result.error ?? "check failed"} (status ${result.statusCode ?? "n/a"})`;
+      } else if (isUp && wasDown && this.alertService.shouldNotifyOnRecovery(monitor)) {
+         reason = "recovery";
+         message = `Monitor "${monitor.name}" has recovered`;
+      } else if (isUp) {
+         const responseTimeThresholdMs = this.alertService.getResponseTimeThresholdMs(monitor);
+         if (responseTimeThresholdMs != null && result.latencyMs > responseTimeThresholdMs && !this.alertService.isInCooldown(monitor)) {
+            reason = "slow_response";
+            message = `Monitor "${monitor.name}" responded slowly: ${result.latencyMs}ms (threshold ${responseTimeThresholdMs}ms)`;
+         }
+      }
+
+      if (!reason) return;
+
+      try {
+         const channelsNotified = await this.alertDispatcher.dispatch(monitor, { reason, message, stats });
+         await this.alertService.recordFire(monitor, reason, message, stats, channelsNotified);
+         this.stats.totalAlertsFired++;
+      } catch (error) {
+         logger.error(`[UptimeWorker] Failed to fire "${reason}" alert for monitor ${monitor._id}`, { error });
+      }
+   }
+
    private async checkMonitor(monitor: UptimeMonitorDocument): Promise<void> {
       try {
          const result = await this.pinger.ping({
@@ -117,6 +182,7 @@ export class UptimeWorker {
          });
 
          const isUp = result.status === "up";
+         const newConsecutiveFailures = isUp ? 0 : monitor.consecutiveFailures + 1;
          this.stats.totalMonitorsChecked++;
          if (isUp) this.stats.totalUp++;
          else this.stats.totalDown++;
@@ -131,10 +197,13 @@ export class UptimeWorker {
             error: result.error,
          });
 
+         // Alerting is an independent failure domain — a dispatch/record failure never blocks the status write-back below.
+         await this.evaluateAndFireAlerts(monitor, result, newConsecutiveFailures);
+
          await this.uptimeMonitorRepo.update(monitor._id.toString(), {
             lastCheckedAt: new Date(),
             lastStatus: result.status,
-            consecutiveFailures: isUp ? 0 : monitor.consecutiveFailures + 1,
+            consecutiveFailures: newConsecutiveFailures,
          });
       } catch (error) {
          logger.error(`[UptimeWorker] Error checking monitor ${monitor._id}`, { error });

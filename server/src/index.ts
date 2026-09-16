@@ -18,6 +18,7 @@ import IngestRouter from "./modules/ingest/routes/ingest.routes";
 import AnalyticsRouter from "./modules/analytics/routes/analytics.route";
 import AlertingRouter from "./modules/alerting/routes/alerting.route";
 import AuditLogRouter from "./modules/audit/routes/auditLog.route";
+import UptimeRouter from "./modules/uptime/routes/uptime.route";
 import { CentralizedRequestLogger } from "./shared/middleware/requestLogger.middleware";
 const app = express();
 
@@ -119,6 +120,7 @@ app.use("/api/v1/ingest", IngestRouter);
 app.use("/api/v1/analytics", AnalyticsRouter);
 app.use("/api/v1/alerting", AlertingRouter);
 app.use("/api/v1/audit-logs", AuditLogRouter);
+app.use("/api/v1/uptime", UptimeRouter);
 /**
  * 404 handler
  */

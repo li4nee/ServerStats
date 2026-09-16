@@ -157,6 +157,22 @@ services:
       mongo:
         condition: service_healthy
 
+  uptime-worker:
+    container_name: server-monitoring-uptime-worker
+    build:
+      context: .
+      dockerfile: Dockerfile.consumer
+    command: ["node", "dist/modules/uptime/worker/uptimeWorkerStartup.js"]
+    env_file: .env
+    networks:
+      - website-monitoring-network
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+
 volumes:
   postgres_data:
     driver: local

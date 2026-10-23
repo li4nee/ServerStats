@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM node:24-alpine AS base
+FROM node:24.22.1-alpine AS base
 WORKDIR /app
 COPY package*.json ./
 
@@ -19,7 +19,7 @@ COPY src ./src
 RUN npm run build
 
 # ---- production: prod deps only + compiled output, non-root ----
-FROM node:24-alpine AS production
+FROM node:24.22.1-alpine AS production
 RUN apk add --no-cache curl
 WORKDIR /app
 ENV NODE_ENV=production
